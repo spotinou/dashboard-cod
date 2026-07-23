@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+.venv/
+venv/
+
+# Local secrets and environment files
+.env
+.env.*
+.streamlit/secrets.toml
+
+# User uploads, generated exports, and runtime logs
+*.xlsx
+*.xls
+*.csv
+*.log
+data/
+exports/
+outputs/
+work/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
