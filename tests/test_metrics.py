@@ -4,6 +4,7 @@ import pytest
 from src.data_loader import prepare_dataframe, validate_columns
 from src.metrics import compute_confirmation_metrics, compute_global_metrics, compute_livreur_metrics, compute_wilaya_metrics
 from src.validation import compute_validation_checks
+from src.ui import FILTER_DEFINITIONS
 
 
 def build_df():
@@ -108,6 +109,32 @@ def test_sku_and_source_are_normalized_for_filters():
     assert "SKU produit" in df.columns
     assert df.loc[df["order_id"] == "A", "SKU produit"].iloc[0] == "Non renseign\u00e9"
     assert df.loc[df["order_id"] == "C", "Source"].iloc[0] == "Non renseign\u00e9"
+
+
+def test_delivery_method_is_normalized_and_available_as_filter():
+    raw = build_df()
+    raw["Méthode de livraison"] = [
+        "Livraison à domicile",
+        "Stop desk",
+        None,
+        "",
+        "Stop desk",
+        "Livraison à domicile",
+    ]
+
+    df = prepare_dataframe(raw)
+
+    assert df.loc[df["order_id"] == "A", "Méthode de livraison"].iloc[0] == "Livraison à domicile"
+    assert df.loc[df["order_id"] == "B", "Méthode de livraison"].iloc[0] == "Stop desk"
+    assert df.loc[df["order_id"] == "C", "Méthode de livraison"].iloc[0] == "Non renseigné"
+    assert ("Méthode de livraison", "Méthode de livraison", "filter_delivery_method") in FILTER_DEFINITIONS
+
+    stop_desk = df[df["Méthode de livraison"].isin(["Stop desk"])]
+    domicile = df[df["Méthode de livraison"].isin(["Livraison à domicile"])]
+    assert stop_desk["order_id"].tolist() == ["B", "E"]
+    assert domicile["order_id"].tolist() == ["A", "F"]
+    assert compute_global_metrics(stop_desk)["orders_received"] == 2
+    assert compute_global_metrics(domicile)["orders_received"] == 2
 
 
 def test_transformation_real_rate_is_exposed_in_business_tables():

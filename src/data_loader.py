@@ -122,6 +122,7 @@ TEXT_COLUMNS = [
     "Référence commande",
     "Tracking",
     "N°commande",
+    "Méthode de livraison",
     "Statut commande",
     "Wilaya",
     "Source",

@@ -71,6 +71,7 @@ FILTER_DEFINITIONS = (
     ("Produit", "Nom produit", "filter_product"),
     ("SKU produit", "SKU produit", "filter_sku"),
     ("Source", "Source", "filter_source"),
+    ("Méthode de livraison", "Méthode de livraison", "filter_delivery_method"),
     ("Livreur", "Livreur", "filter_delivery_partner"),
     ("Confirmatrice", "Affect\u00e9e \u00e0", "filter_confirmatrice"),
     ("Wilaya", "Wilaya", "filter_wilaya"),
