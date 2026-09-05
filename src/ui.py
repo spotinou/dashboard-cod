@@ -949,9 +949,33 @@ def owner_money_sections(metrics: dict, amounts: dict[str, float | None]) -> lis
     ]
 
 
+def confirmation_funnel_counts(metrics: dict) -> tuple[int, float | None, float | None]:
+    """Return the exclusive confirmed stage used by the visual COD funnel."""
+    received = int(metrics.get("orders_received", 0) or 0)
+    confirmed_net = int(metrics.get("orders_confirmed_net", 0) or 0)
+    in_confirmation = int(metrics.get("orders_in_confirmation", 0) or 0)
+    unclassified = int(metrics.get("orders_unclassified", 0) or 0)
+    confirmed = max(confirmed_net - in_confirmation - unclassified, 0)
+    return confirmed, safe_ratio(confirmed, received), safe_ratio(int(metrics.get("orders_preparation", 0) or 0), confirmed)
+
+
+def displayed_reception_rates(metrics: dict, confirmation_rate: float | None) -> tuple[float | None, float | None, float | None]:
+    """Keep the three exclusive reception outcomes at exactly 100.0% on cards."""
+    received = int(metrics.get("orders_received", 0) or 0)
+    if received == 0:
+        return None, None, None
+    in_confirmation_rate = safe_ratio(int(metrics.get("orders_in_confirmation", 0) or 0), received)
+    cancellation_rate = safe_ratio(int(metrics.get("orders_cancelled", 0) or 0), received)
+    pending_tenths = round((in_confirmation_rate or 0) * 1000)
+    cancelled_tenths = round((cancellation_rate or 0) * 1000)
+    confirmed_display_rate = max(0, 1000 - pending_tenths - cancelled_tenths) / 1000
+    return confirmed_display_rate, in_confirmation_rate, cancellation_rate
+
+
 def owner_kpi_sections(metrics: dict, thresholds: dict[str, float]) -> list[tuple[str, str, str, str]]:
     received = int(metrics.get("orders_received", 0) or 0)
-    confirmed = int(metrics.get("orders_confirmed_net", 0) or 0)
+    confirmed, confirmation_rate, preparation_rate = confirmation_funnel_counts(metrics)
+    confirmation_display_rate, in_confirmation_rate, cancellation_display_rate = displayed_reception_rates(metrics, confirmation_rate)
     in_confirmation = int(metrics.get("orders_in_confirmation", 0) or 0)
     preparation = int(metrics.get("orders_preparation", 0) or 0)
     sent = int(metrics.get("orders_sent", 0) or 0)
@@ -960,20 +984,19 @@ def owner_kpi_sections(metrics: dict, thresholds: dict[str, float]) -> list[tupl
     delivered = int(metrics.get("orders_delivered", 0) or 0)
     cancelled = int(metrics.get("orders_cancelled", 0) or 0)
 
-    in_confirmation_rate = safe_ratio(in_confirmation, received)
     dispatch_rate = safe_ratio(dispatch, sent)
     in_delivery_rate = safe_ratio(in_delivery, sent)
 
     return [
-        ("Commandes re\u00e7ues", str(received), "Base de la p\u00e9riode", "neutral"),
-        ("Taux confirm\u00e9", pct(metrics.get("confirmation_rate")), f"{confirmed} commandes confirm\u00e9es\nBase : {received} re\u00e7ues", tone_class(metrics.get("confirmation_rate"), "confirmation", thresholds)),
-        ("Taux en cours de confirmation", pct(in_confirmation_rate), f"{in_confirmation} commandes en confirmation\nBase : {received} re\u00e7ues", tone_class(in_confirmation_rate, "preparation", thresholds)),
-        ("Taux en pr\u00e9paration", pct(metrics.get("preparation_blockage_rate")), f"{preparation} commandes en pr\u00e9paration\nBase : {confirmed} confirm\u00e9es", tone_class(metrics.get("preparation_blockage_rate"), "preparation", thresholds)),
-        ("Taux en dispatch", pct(dispatch_rate), f"{dispatch} commandes en dispatch\nBase : {sent} exp\u00e9di\u00e9es", "warn" if dispatch else "good"),
-        ("Taux en cours de livraison", pct(in_delivery_rate), f"{in_delivery} commandes en livraison\nBase : {sent} exp\u00e9di\u00e9es", "warn" if in_delivery else "good"),
-        ("Taux livr\u00e9", pct(metrics.get("delivery_total_rate_on_sent")), f"{delivered} commandes livr\u00e9es\nBase : {sent} exp\u00e9di\u00e9es", tone_class(metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
-        ("Taux de transformation brute", pct(metrics.get("transformation_real_rate")), f"{delivered} livr\u00e9es / {received} re\u00e7ues", tone_class(metrics.get("transformation_real_rate"), "transformation", thresholds)),
-        ("Taux annul\u00e9", pct(metrics.get("cancellation_rate")), f"{cancelled} commandes annul\u00e9es\nBase : {received} re\u00e7ues", tone_class(metrics.get("cancellation_rate"), "cancellation", thresholds)),
+        ("Commandes reçues", str(received), "Base de la période", "neutral"),
+        ("Taux confirmé", pct(confirmation_display_rate), f"{confirmed} commandes confirmées\nBase : {received} reçues", tone_class(confirmation_rate, "confirmation", thresholds)),
+        ("Taux en cours de confirmation", pct(in_confirmation_rate), f"{in_confirmation} commandes en confirmation\nBase : {received} reçues", tone_class(in_confirmation_rate, "preparation", thresholds)),
+        ("Taux en préparation", pct(preparation_rate), f"{preparation} commandes en préparation\nBase : {confirmed} confirmées", tone_class(preparation_rate, "preparation", thresholds)),
+        ("Taux en dispatch", pct(dispatch_rate), f"{dispatch} commandes en dispatch\nBase : {sent} expédiées", "warn" if dispatch else "good"),
+        ("Taux en cours de livraison", pct(in_delivery_rate), f"{in_delivery} commandes en livraison\nBase : {sent} expédiées", "warn" if in_delivery else "good"),
+        ("Taux livré", pct(metrics.get("delivery_total_rate_on_sent")), f"{delivered} commandes livrées\nBase : {sent} expédiées", tone_class(metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
+        ("Taux de transformation brute", pct(metrics.get("transformation_real_rate")), f"{delivered} livrées / {received} reçues", tone_class(metrics.get("transformation_real_rate"), "transformation", thresholds)),
+        ("Taux annulé", pct(cancellation_display_rate), f"{cancelled} commandes annulées\nBase : {received} reçues", tone_class(metrics.get("cancellation_rate"), "cancellation", thresholds)),
     ]
 
 
@@ -989,7 +1012,7 @@ def owner_priority(metrics: dict) -> tuple[str, int, float]:
 def render_owner_global_dashboard(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float]) -> None:
     cockpit_heading(
         "Parcours COD",
-        "R\u00e9ception -> Confirmation -> Pr\u00e9paration -> Dispatch -> En livraison -> Livr\u00e9e.",
+        "Réception : confirmées + en cours de confirmation + annulées = 100,0 %. Les étapes suivantes utilisent leur base affichée.",
     )
     render_section_kpis(owner_kpi_sections(metrics, thresholds), max_per_row=4)
     cockpit_heading(
@@ -2048,15 +2071,17 @@ def run_app() -> None:
 
     with tabs[1]:
         tab_header("Confirmation", "Qualite des confirmatrices et transformation reelle par cohorte.")
+        funnel_confirmed, funnel_confirmation_rate, funnel_preparation_rate = confirmation_funnel_counts(global_metrics)
+        funnel_confirmation_display_rate, funnel_in_confirmation_rate, funnel_cancellation_display_rate = displayed_reception_rates(global_metrics, funnel_confirmation_rate)
         render_section_kpis(
             [
-                ("Commandes re\u00e7ues", global_metrics["orders_received"], "Base de la p\u00e9riode", "neutral"),
-                ("Taux confirm\u00e9", pct(global_metrics["confirmation_rate"]), f"{global_metrics['orders_confirmed_net']} commandes confirm\u00e9es\nBase : {global_metrics['orders_received']} re\u00e7ues", tone_class(global_metrics.get("confirmation_rate"), "confirmation", thresholds)),
-                ("Taux en cours de confirmation", pct(safe_ratio(global_metrics.get("orders_in_confirmation", 0), global_metrics["orders_received"])), f"{global_metrics.get('orders_in_confirmation', 0)} commandes en confirmation\nBase : {global_metrics['orders_received']} re\u00e7ues", tone_class(safe_ratio(global_metrics.get("orders_in_confirmation", 0), global_metrics["orders_received"]), "preparation", thresholds)),
-                ("Taux en pr\u00e9paration", pct(global_metrics.get("preparation_blockage_rate")), f"{global_metrics['orders_preparation']} commandes en pr\u00e9paration\nBase : {global_metrics['orders_confirmed_net']} confirm\u00e9es", tone_class(global_metrics.get("preparation_blockage_rate"), "preparation", thresholds)),
-                ("Taux livr\u00e9", pct(global_metrics["delivery_total_rate_on_sent"]), f"{global_metrics['orders_delivered']} commandes livr\u00e9es\nBase : {global_metrics['orders_sent']} exp\u00e9di\u00e9es", tone_class(global_metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
-                ("Taux de transformation brute", pct(global_metrics["transformation_real_rate"]), f"{global_metrics['orders_delivered']} livr\u00e9es / {global_metrics['orders_received']} re\u00e7ues", tone_class(global_metrics.get("transformation_real_rate"), "transformation", thresholds)),
-                ("Taux annul\u00e9", pct(global_metrics["cancellation_rate"]), f"{global_metrics['orders_cancelled']} commandes annul\u00e9es\nBase : {global_metrics['orders_received']} re\u00e7ues", tone_class(global_metrics.get("cancellation_rate"), "cancellation", thresholds)),
+                ("Commandes reçues", global_metrics["orders_received"], "Base de la période", "neutral"),
+                ("Taux confirmé", pct(funnel_confirmation_display_rate), f"{funnel_confirmed} commandes confirmées\nBase : {global_metrics['orders_received']} reçues", tone_class(funnel_confirmation_rate, "confirmation", thresholds)),
+                ("Taux en cours de confirmation", pct(funnel_in_confirmation_rate), f"{global_metrics.get('orders_in_confirmation', 0)} commandes en confirmation\nBase : {global_metrics['orders_received']} reçues", tone_class(funnel_in_confirmation_rate, "preparation", thresholds)),
+                ("Taux en préparation", pct(funnel_preparation_rate), f"{global_metrics['orders_preparation']} commandes en préparation\nBase : {funnel_confirmed} confirmées", tone_class(funnel_preparation_rate, "preparation", thresholds)),
+                ("Taux livré", pct(global_metrics["delivery_total_rate_on_sent"]), f"{global_metrics['orders_delivered']} commandes livrées\nBase : {global_metrics['orders_sent']} expédiées", tone_class(global_metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
+                ("Taux de transformation brute", pct(global_metrics["transformation_real_rate"]), f"{global_metrics['orders_delivered']} livrées / {global_metrics['orders_received']} reçues", tone_class(global_metrics.get("transformation_real_rate"), "transformation", thresholds)),
+                ("Taux annulé", pct(funnel_cancellation_display_rate), f"{global_metrics['orders_cancelled']} commandes annulées\nBase : {global_metrics['orders_received']} reçues", tone_class(global_metrics.get("cancellation_rate"), "cancellation", thresholds)),
             ],
             max_per_row=3,
         )

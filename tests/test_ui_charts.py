@@ -668,8 +668,8 @@ def test_owner_money_sections_are_compact_ordered_and_based_on_received_ca():
 def test_owner_kpi_sections_follow_cod_funnel_and_show_denominators():
     metrics = {
         "orders_received": 700,
-        "orders_confirmed_net": 520,
-        "confirmation_rate": 520 / 700,
+        "orders_confirmed_net": 580,
+        "confirmation_rate": 580 / 700,
         "orders_cancelled": 120,
         "cancellation_rate": 120 / 700,
         "orders_in_confirmation": 60,
@@ -715,6 +715,43 @@ def test_owner_kpi_sections_follow_cod_funnel_and_show_denominators():
     assert cards["Taux livr\u00e9"] == ("66.7 %", "300 commandes livr\u00e9es\nBase : 450 exp\u00e9di\u00e9es")
     assert cards["Taux de transformation brute"] == ("42.9 %", "300 livr\u00e9es / 700 re\u00e7ues")
     assert cards["Taux annul\u00e9"] == ("17.1 %", "120 commandes annul\u00e9es\nBase : 700 re\u00e7ues")
+    assert sum(float(cards[title][0].replace(" %", "")) for title in ("Taux confirm\u00e9", "Taux en cours de confirmation", "Taux annul\u00e9")) == 100.0
+
+
+def test_owner_kpi_reception_cards_are_exclusive_and_total_exactly_100_percent():
+    metrics = {
+        "orders_received": 38,
+        "orders_confirmed_net": 30,
+        "orders_in_confirmation": 8,
+        "orders_unclassified": 0,
+        "orders_cancelled": 8,
+        "orders_preparation": 2,
+        "orders_sent": 20,
+        "orders_dispatch": 0,
+        "orders_in_delivery": 20,
+        "orders_delivered": 0,
+        "confirmation_rate": 30 / 38,
+        "cancellation_rate": 8 / 38,
+        "delivery_total_rate_on_sent": 0,
+        "transformation_real_rate": 0,
+    }
+    thresholds = {
+        "confirmation_green": 0.70,
+        "confirmation_orange": 0.60,
+        "cancellation_orange": 0.15,
+        "cancellation_red": 0.25,
+        "delivery_green": 0.70,
+        "delivery_orange": 0.60,
+        "preparation_orange": 0.05,
+        "preparation_red": 0.15,
+    }
+
+    cards = {title: value for title, value, _, _ in owner_kpi_sections(metrics, thresholds)}
+
+    assert cards["Taux confirmé"] == "57.8 %"
+    assert cards["Taux en cours de confirmation"] == "21.1 %"
+    assert cards["Taux annulé"] == "21.1 %"
+    assert sum(float(cards[title].replace(" %", "")) for title in ("Taux confirmé", "Taux en cours de confirmation", "Taux annulé")) == 100.0
 
 
 def test_preparation_metrics_by_dimension_keeps_numeric_rates():
