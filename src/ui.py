@@ -1009,17 +1009,27 @@ def owner_priority(metrics: dict) -> tuple[str, int, float]:
     return max(priorities, key=lambda item: item[1])
 
 
-def render_owner_global_dashboard(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float]) -> None:
+def render_owner_global_dashboard(
+    df: pd.DataFrame,
+    metrics: dict,
+    thresholds: dict[str, float],
+    priority_actions: pd.DataFrame | None = None,
+) -> None:
     cockpit_heading(
         "Parcours COD",
         "Réception : confirmées + en cours de confirmation + annulées = 100,0 %. Les étapes suivantes utilisent leur base affichée.",
     )
-    render_section_kpis(owner_kpi_sections(metrics, thresholds), max_per_row=4)
+    journey = owner_kpi_sections(metrics, thresholds)
+    render_stage_kpis("1. Reception", "Ce qui entre dans le funnel et ce qui en sort avant expedition.", journey[:4])
+    render_stage_kpis("2. Execution", "Les commandes confirmees progressent vers une livraison finalisee.", journey[4:8])
+    render_stage_kpis("3. Resultat", "La transformation brute replace la livraison dans le volume recu.", journey[8:])
     cockpit_heading(
         "Argent / Chiffre d'affaires",
         "CA potentiel, bloqu\u00e9, s\u00e9curis\u00e9 ou perdu sur le p\u00e9rim\u00e8tre actif.",
     )
     render_section_kpis(owner_money_sections(metrics, amount_totals(df, metrics)), max_per_row=4)
+    if priority_actions is not None:
+        render_priority_focus(priority_actions)
 
 
 def top_known(df: pd.DataFrame, label_col: str, sort_col: str, limit: int = 5) -> pd.DataFrame:
@@ -1148,6 +1158,37 @@ def render_section_kpis(items: list[tuple[str, str, str, str]], max_per_row: int
         for col, (title, value, note, tone) in zip(cols, row_items):
             with col:
                 mini_card(title, str(value), note, tone=tone)
+
+
+def render_stage_kpis(title: str, subtitle: str, items: list[tuple[str, str, str, str]]) -> None:
+    """Render one readable stage of the COD journey without altering its KPIs."""
+    st.markdown(
+        f'<div class="stage-heading"><span>{html_text(title)}</span><small>{html_text(subtitle)}</small></div>',
+        unsafe_allow_html=True,
+    )
+    cols = st.columns(4)
+    for col, (label, value, note, tone) in zip(cols, items):
+        with col:
+            mini_card(label, str(value), note, tone=tone)
+
+
+def render_priority_focus(priority_actions: pd.DataFrame) -> None:
+    """Surface the first reliable action already produced by the analysis layer."""
+    if priority_actions.empty:
+        return
+    action = priority_actions.iloc[0]
+    priority = str(action.get("priorite", "Info")).lower()
+    tone = {"rouge": "bad", "orange": "warn", "vert": "good"}.get(priority, "neutral")
+    st.markdown(
+        f'''<div class="focus-card {tone}">
+            <div class="focus-kicker">Priorite operationnelle</div>
+            <div class="focus-title">{html_text(action.get("objet", DASH))}</div>
+            <div class="focus-problem">{html_text(action.get("probleme_detecte", DASH))}</div>
+            <div class="focus-action">{html_text(action.get("recommandation_concrete", DASH))}</div>
+            <div class="focus-proof">{html_text(action.get("preuve_data", ""))} · Confiance : {html_text(action.get("niveau_confiance", DASH))}</div>
+        </div>''',
+        unsafe_allow_html=True,
+    )
 
 
 def render_data_table(df: pd.DataFrame, columns: list[str], thresholds: dict[str, float], empty_message: str, sort_by: list[str] | str | None = None, height: int | None = None):
@@ -1981,10 +2022,10 @@ def run_app() -> None:
         .tab-header{border:1px solid #dbe3ef;border-left:5px solid #334155;background:#f8fafc;border-radius:8px;padding:10px 13px;margin:4px 0 12px}.tab-title{font-size:19px;font-weight:850;color:#0f172a}.tab-subtitle{font-size:12.5px;color:#64748b;margin-top:2px;line-height:1.35}
         .card-topline,.mini-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.status-pill,.mini-badge{border-radius:999px;padding:2px 7px;font-size:10.5px;font-weight:850}.status-pill.good,.mini-badge.good,.mini-badge.opportunity{background:#dcfce7;color:#166534}.status-pill.warn,.mini-badge.warn{background:#fef3c7;color:#92400e}.status-pill.bad,.mini-badge.bad,.mini-badge.loss{background:#fee2e2;color:#991b1b}.status-pill.neutral,.mini-badge.neutral,.mini-badge.info{background:#dbeafe;color:#1e40af}
         .hero-card{border:1px solid #243244;border-left-width:5px;border-radius:8px;background:linear-gradient(135deg,#101827,#172033);color:#f9fafb;padding:11px 13px;min-height:104px;margin-bottom:8px;box-shadow:0 6px 18px rgba(15,23,42,.10)}.hero-card.good{border-left-color:#22c55e}.hero-card.warn{border-left-color:#f59e0b}.hero-card.bad{border-left-color:#ef4444}.hero-card.neutral{border-left-color:#3b82f6}.hero-title{font-size:10.5px;color:#cbd5e1;text-transform:uppercase;letter-spacing:.04em}.hero-value{font-size:25px;font-weight:850;margin-top:6px;line-height:1.05}.hero-sub{font-size:12px;color:#cbd5e1;margin-top:5px;line-height:1.25}
-        .mini-card{border:1px solid #d7dee8;border-left-width:4px;border-radius:8px;background:#fff;padding:8px 10px;min-height:76px;margin-bottom:7px}.mini-card.good,.mini-card.opportunity{border-left-color:#22c55e;background:#f0fdf4}.mini-card.warn{border-left-color:#f59e0b;background:#fffbeb}.mini-card.loss,.mini-card.bad{border-left-color:#ef4444;background:#fff1f2}.mini-card.info,.mini-card.neutral{border-left-color:#3b82f6}.mini-card.detail{min-height:68px;padding:7px 9px}.mini-title{font-size:11.5px;color:#475569;font-weight:800}.mini-value{font-size:18px;font-weight:850;color:#0f172a;margin-top:3px;line-height:1.08}.mini-note{font-size:11.5px;color:#64748b;line-height:1.22;margin-top:3px;white-space:pre-line}.mini-card.detail .mini-value{font-size:16px}.mini-card.detail .mini-note{font-size:10.8px}
+        .mini-card{border:1px solid #d7dee8;border-left-width:4px;border-radius:8px;background:#fff;padding:9px 11px;min-height:80px;margin-bottom:7px;box-shadow:0 1px 2px rgba(15,23,42,.035)}.mini-card.good,.mini-card.opportunity{border-left-color:#22c55e;background:#f0fdf4}.mini-card.warn{border-left-color:#f59e0b;background:#fffbeb}.mini-card.loss,.mini-card.bad{border-left-color:#ef4444;background:#fff1f2}.mini-card.info,.mini-card.neutral{border-left-color:#3b82f6}.mini-card.detail{min-height:68px;padding:7px 9px}.mini-title{font-size:11.5px;color:#475569;font-weight:800}.mini-value{font-size:19px;font-weight:850;color:#0f172a;margin-top:4px;line-height:1.08}.mini-note{font-size:11.5px;color:#64748b;line-height:1.22;margin-top:4px;white-space:pre-line}.mini-card.detail .mini-value{font-size:16px}.mini-card.detail .mini-note{font-size:10.8px}
         .leak-banner{border:1px solid #fecaca;background:#fff1f2;color:#7f1d1d;border-radius:8px;padding:7px 11px;margin:3px 0 8px;font-size:12.5px}.funnel-arrow{text-align:center;color:#64748b;font-size:20px;font-weight:900;padding-top:30px}
-        .section-tight{margin-top:16px;margin-bottom:4px;font-weight:850;font-size:16px;color:#0f172a}.section-subtitle{font-size:12px;color:#64748b;margin-bottom:7px}.detail-title{font-weight:850;margin:10px 0 5px;color:#0f172a}.filter-banner{border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;color:#334155;padding:7px 10px;margin:4px 0 10px;font-size:12px;line-height:1.3}
-        div[data-testid="stDataFrame"]{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}div[data-testid="stDataFrame"] *{font-size:12px}div[data-testid="stExpander"]{border-color:#e2e8f0;border-radius:8px}.stAlert{padding:.6rem .75rem}
+        .section-tight{margin-top:18px;margin-bottom:4px;font-weight:850;font-size:16px;color:#0f172a}.section-subtitle{font-size:12px;color:#64748b;margin-bottom:7px}.detail-title{font-weight:850;margin:10px 0 5px;color:#0f172a}.filter-banner{border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;color:#334155;padding:7px 10px;margin:4px 0 10px;font-size:12px;line-height:1.3}.stage-heading{display:flex;align-items:baseline;gap:9px;margin:11px 0 6px;padding-left:10px;border-left:3px solid #2563eb;color:#0f172a;font-size:13px;font-weight:850}.stage-heading small{font-size:11.5px;font-weight:500;color:#64748b}.focus-card{border:1px solid #d7dee8;border-left:5px solid #2563eb;border-radius:8px;background:#fff;padding:11px 13px;margin:12px 0 4px;box-shadow:0 1px 2px rgba(15,23,42,.04)}.focus-card.good{border-left-color:#16a34a;background:#f0fdf4}.focus-card.warn{border-left-color:#f59e0b;background:#fffbeb}.focus-card.bad{border-left-color:#dc2626;background:#fff1f2}.focus-kicker{font-size:10.5px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;color:#64748b}.focus-title{font-size:15px;font-weight:850;color:#0f172a;margin-top:2px}.focus-problem{font-size:12px;color:#334155;margin-top:2px}.focus-action{font-size:12.5px;font-weight:700;color:#0f172a;margin-top:7px}.focus-proof{font-size:11.5px;color:#64748b;margin-top:5px}
+        div[data-testid="stDataFrame"]{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.025)}div[data-testid="stDataFrame"] *{font-size:12px}div[data-testid="stExpander"]{border-color:#e2e8f0;border-radius:8px}.stAlert{padding:.6rem .75rem}
         </style>
         """,
         unsafe_allow_html=True,
@@ -2030,6 +2071,24 @@ def run_app() -> None:
     products_advice = add_product_advice(products, volume_product, thresholds)
     confirmation_quality = compute_confirmatrice_quality(df, confirmation, volume_confirmatrice, thresholds)
     arbitrage_livreur = compute_livreur_wilaya_arbitrage(df, volume_sent, thresholds)
+    opportunities = compute_opportunities(
+        products,
+        wilayas,
+        product_wilaya,
+        volume_product,
+        volume_sent,
+        thresholds,
+    )
+    priority_actions = compute_priority_actions(
+        products,
+        wilayas,
+        confirmation_quality,
+        arbitrage_livreur,
+        opportunities,
+        volume_product,
+        volume_sent,
+        thresholds,
+    )
     source_performance = compute_dimension_performance(df, ["Source"], volume_product, thresholds)
     sku_performance = compute_dimension_performance(df, ["SKU produit"], volume_product, thresholds)
     confirmation_display = confirmation.merge(
@@ -2067,7 +2126,7 @@ def run_app() -> None:
         render_quality_badge(validation_checks)
         render_date_context(date_context)
         render_active_filters_banner(date_context)
-        render_owner_global_dashboard(df, global_metrics, thresholds)
+        render_owner_global_dashboard(df, global_metrics, thresholds, priority_actions)
 
     with tabs[1]:
         tab_header("Confirmation", "Qualite des confirmatrices et transformation reelle par cohorte.")
@@ -2103,6 +2162,7 @@ def run_app() -> None:
 
         with st.expander("Voir detail complet confirmation", expanded=False):
             render_data_table(confirmation_display, list(confirmation_display.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_recues")
+        decision_summary("Résumé décisionnel", confirmation_summary(confirmation_display, volume_confirmatrice))
 
     with tabs[2]:
         tab_header("Livraison & livreurs", "Performance apres expedition, retours et CA bloque chez les livreurs.")
@@ -2146,6 +2206,7 @@ def run_app() -> None:
             st.info("Aucun livreur avec un volume suffisant pour un classement fiable.")
         with st.expander("Voir detail complet livreurs", expanded=False):
             render_data_table(livreurs_ui, list(livreurs_ui.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
+        decision_summary("Résumé décisionnel", delivery_summary(livreurs_ui, volume_sent))
 
     with tabs[3]:
         tab_header("Produits", "Produits qui encaissent, produits qui perdent et segments a surveiller.")
@@ -2197,6 +2258,7 @@ def run_app() -> None:
             amount_bar(reliable_products, "produit", "ca_retours", "Top Perte CA retours par produit")
         with st.expander("Voir detail complet produits", expanded=False):
             render_data_table(products_advice, list(products_advice.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="ca_livre")
+        decision_summary("Résumé décisionnel", product_summary(products_ui, volume_product))
 
     with tabs[4]:
         tab_header("Wilayas & alertes", "Zones fortes, zones a risque et alertes operationnelles.")
@@ -2249,6 +2311,7 @@ def run_app() -> None:
                     st.markdown(f"<div class='alert {alert['niveau']}'><b>{alert['titre']}</b><br>{alert['message']}</div>", unsafe_allow_html=True)
             else:
                 st.info("Aucune alerte critique detectee avec les seuils actifs.")
+        decision_summary("Résumé décisionnel", wilaya_summary(wilayas_ui, volume_sent))
 
     with tabs[5]:
         tab_header("Validation chiffres", "Controle qualite du fichier, anomalies et coherence des egalites COD.")
@@ -2273,6 +2336,7 @@ def run_app() -> None:
         render_data_table(validation_view, ["controle", "valeur", "attendu", "statut", "details"], thresholds, "Aucun controle de validation disponible.", sort_by="statut", height=adaptive_height(validation_view, max_height=520))
         with st.expander("Voir tous les controles", expanded=False):
             render_data_table(validation_checks, list(validation_checks.columns), thresholds, "Aucun controle de validation disponible.")
+        decision_summary("Résumé décisionnel", validation_summary(validation_checks))
 
     with tabs[6]:
         tab_header("Donnees nettoyees / export", "Apercu nettoye et exports operationnels sans donnees sensibles.")
