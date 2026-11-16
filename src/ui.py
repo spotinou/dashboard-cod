@@ -6,6 +6,7 @@ from io import BytesIO
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 from pandas.api.types import is_object_dtype, is_scalar
 
@@ -19,6 +20,13 @@ from .metrics import (
     compute_product_metrics,
     compute_product_wilaya_alerts,
     compute_wilaya_metrics,
+)
+from .trends import (
+    GRANULARITY_FREQ,
+    auto_granularity,
+    compute_period_comparison,
+    compute_trend,
+    previous_period,
 )
 from .validation import compute_validation_checks
 
@@ -1882,6 +1890,7 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
         df = df.iloc[0:0].copy()
 
     active_filters = []
+    applied_filter_values = []
     for label, col, key in FILTER_DEFINITIONS:
         if col not in df.columns:
             st.session_state.pop(key, None)
@@ -1892,6 +1901,7 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
         if selected:
             selected_values = list(selected)
             active_filters.append({"label": label, "count": len(selected_values), "values": [str(value) for value in selected_values]})
+            applied_filter_values.append((col, selected_values))
             df = df[df[col].isin(selected_values)]
 
     st.sidebar.header("Seuils")
@@ -1914,7 +1924,186 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
     }
     date_context["kept_rows_after_filters"] = len(df)
     date_context["active_secondary_filters"] = active_filters
+    date_context["applied_filter_values"] = applied_filter_values
     return df, thresholds, date_context
+
+TREND_COLORS = {
+    "recues": "#94a3b8",
+    "confirmees": "#2563eb",
+    "livrees": "#16a34a",
+    "retours": "#dc2626",
+    "transformation": "#7c3aed",
+    "ca": "#0f766e",
+}
+TREND_GRANULARITY_KEY = "trend_granularity"
+TREND_PERIOD_KEY = "trend_granularity_period"
+TREND_HOVER_FORMAT = {"Jour": "%d/%m/%Y", "Semaine": "Semaine du %d/%m/%Y", "Mois": "%m/%Y"}
+
+
+def apply_filter_values(df: pd.DataFrame, applied_filter_values) -> pd.DataFrame:
+    """Re-apply the sidebar multiselect filters (column, values) to another frame."""
+    out = df
+    for col, values in applied_filter_values or []:
+        if col in out.columns:
+            out = out[out[col].isin(list(values))]
+    return out
+
+
+def previous_period_frame(loaded_df: pd.DataFrame, date_context: dict) -> tuple[pd.DataFrame | None, tuple | None]:
+    """Orders of the same-length period just before the active one, with the same filters."""
+    window = previous_period(date_context.get("start_date"), date_context.get("end_date"))
+    if window is None:
+        return None, None
+    prev_df, _ = apply_date_filter(loaded_df, date_context.get("selected_date_type", DATE_TYPE_OPTIONS[0]), window[0], window[1])
+    prev_df = apply_filter_values(prev_df, date_context.get("applied_filter_values"))
+    if prev_df.empty:
+        return None, window
+    return prev_df, window
+
+
+def format_delta(row: dict) -> str:
+    delta = row.get("delta")
+    if delta is None:
+        return "Pas de comparaison"
+    arrow = {"up": "▲", "down": "▼"}.get(row.get("direction"), "=")
+    if row.get("kind") == "rate":
+        return f"{arrow} {delta * 100:+.1f} pts".replace(".", ",")
+    return f"{arrow} {delta * 100:+.1f} %".replace(".", ",")
+
+
+def format_metric_value(value, kind: str) -> str:
+    if kind == "rate":
+        return pct(value)
+    if kind == "money":
+        return money(value)
+    return DASH if value is None else str(int(value))
+
+
+def comparison_cards(rows: list[dict], window: tuple | None) -> list[tuple[str, str, str, str]]:
+    period = f"{format_date(window[0])} → {format_date(window[1])}" if window else ""
+    cards = []
+    for row in rows:
+        value = format_metric_value(row["value"], row["kind"])
+        if row["delta"] is None:
+            note = "Pas de données sur la période précédente"
+        else:
+            note = f"{format_delta(row)} vs période précédente\nAvant : {format_metric_value(row['previous'], row['kind'])} ({period})"
+        cards.append((row["label"], value, note, row["tone"]))
+    return cards
+
+
+def _trend_layout(fig, title: str, granularity: str, height: int = 320):
+    fig.update_layout(
+        title=title,
+        height=height,
+        hovermode="x unified",
+        legend={"orientation": "h", "yanchor": "top", "y": -0.14, "xanchor": "left", "x": 0},
+        margin={"l": 10, "r": 10, "t": 45, "b": 10},
+    )
+    fig.update_xaxes(hoverformat=TREND_HOVER_FORMAT.get(granularity, "%d/%m/%Y"), showgrid=False)
+    return fig
+
+
+def build_trend_volume_figure(trend: pd.DataFrame, granularity: str = "Jour"):
+    if trend.empty or len(trend) < 2:
+        return None
+    fig = go.Figure()
+    fig.add_bar(x=trend["periode"], y=trend["commandes_recues"], name="Reçues", marker_color=TREND_COLORS["recues"], opacity=0.55)
+    for col, name, color in (
+        ("commandes_confirmees", "Confirmées", TREND_COLORS["confirmees"]),
+        ("livrees", "Livrées", TREND_COLORS["livrees"]),
+        ("retours", "Retours / échecs", TREND_COLORS["retours"]),
+    ):
+        fig.add_scatter(x=trend["periode"], y=trend[col], name=name, mode="lines+markers", line={"color": color, "width": 2.5}, marker={"size": 5})
+    fig.update_yaxes(title=None, rangemode="tozero")
+    return _trend_layout(fig, "Volumes de commandes", granularity)
+
+
+def build_trend_rate_figure(trend: pd.DataFrame, granularity: str = "Jour", thresholds: dict[str, float] | None = None):
+    if trend.empty or len(trend) < 2:
+        return None
+    fig = go.Figure()
+    for col, name, color, dash in (
+        ("taux_confirmation", "Taux confirmé", TREND_COLORS["confirmees"], None),
+        ("taux_livraison_finalisees", "Livraison finalisée", TREND_COLORS["livrees"], None),
+        ("taux_retour", "Retour (sur expédiées)", TREND_COLORS["retours"], None),
+        ("taux_transformation_reel", "Transformation brute", TREND_COLORS["transformation"], "dot"),
+    ):
+        values = pd.to_numeric(trend[col], errors="coerce")
+        fig.add_scatter(
+            x=trend["periode"], y=values, name=name, mode="lines+markers",
+            line={"color": color, "width": 2.5, "dash": dash}, marker={"size": 5}, connectgaps=False,
+        )
+    if thresholds and thresholds.get("delivery_green") is not None:
+        fig.add_hline(
+            y=float(thresholds["delivery_green"]), line_dash="dash", line_color="#86efac",
+            annotation_text="Objectif livraison", annotation_position="top left", annotation_font_size=10,
+        )
+    fig.update_yaxes(tickformat=".0%", range=[0, 1.05], title=None)
+    return _trend_layout(fig, "Taux clés", granularity)
+
+
+def build_cumulative_ca_figure(trend: pd.DataFrame, granularity: str = "Jour"):
+    if trend.empty or len(trend) < 2:
+        return None
+    fig = go.Figure()
+    fig.add_bar(x=trend["periode"], y=trend["ca_livre"], name="CA livré de la période", marker_color=TREND_COLORS["ca"], opacity=0.35)
+    fig.add_scatter(
+        x=trend["periode"], y=trend["ca_livre_cumule"], name="CA livré cumulé", mode="lines",
+        line={"color": TREND_COLORS["ca"], "width": 3}, fill="tozeroy", fillcolor="rgba(15,118,110,0.08)",
+    )
+    fig.update_yaxes(title=None, rangemode="tozero", tickformat=",.0f", ticksuffix=" DA")
+    fig.update_layout(separators=", ")
+    return _trend_layout(fig, "CA livré (par période et cumulé)", granularity, height=300)
+
+
+def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context: dict, global_metrics: dict, thresholds: dict[str, float]) -> None:
+    """Evolution over time + comparison with the previous period. Purely additive: never alters existing KPIs."""
+    try:
+        cockpit_heading(
+            "Évolution vs période précédente",
+            "Mêmes filtres et même type de date, sur une période de même durée juste avant la période analysée.",
+        )
+        prev_df, window = previous_period_frame(loaded_df, date_context)
+        if window is None:
+            st.caption("Comparaison indisponible : aucune période d'analyse définie.")
+        elif prev_df is None:
+            st.caption(f"Aucune commande sur la période précédente ({format_date(window[0])} → {format_date(window[1])}). Choisis une période plus courte pour comparer.")
+        else:
+            rows = compute_period_comparison(global_metrics, compute_global_metrics(prev_df))
+            render_section_kpis(comparison_cards(rows, window), max_per_row=6)
+            st.caption(
+                "Attention : sur une période récente, des colis sont encore en route. Le taux de livraison finalisée "
+                "(livrées / livrées + retours) limite ce biais, mais le CA livré et la transformation brute peuvent encore monter."
+            )
+
+        cockpit_heading("Courbes d'évolution", f"Commandes regroupées par « {date_context.get('selected_date_type', DATE_TYPE_OPTIONS[0])} ».")
+        options = list(GRANULARITY_FREQ)
+        default = auto_granularity(date_context.get("start_date"), date_context.get("end_date"))
+        period_signature = (date_context.get("start_date"), date_context.get("end_date"))
+        if st.session_state.get(TREND_GRANULARITY_KEY) not in options or st.session_state.get(TREND_PERIOD_KEY) != period_signature:
+            st.session_state[TREND_GRANULARITY_KEY] = default
+            st.session_state[TREND_PERIOD_KEY] = period_signature
+        granularity = st.radio("Regrouper par", options, horizontal=True, key=TREND_GRANULARITY_KEY)
+        trend = compute_trend(df, date_context.get("date_column"), granularity)
+        if len(trend) < 2:
+            st.info("Pas assez de périodes pour tracer une évolution : choisis une période plus longue ou un regroupement plus fin.")
+            return
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(build_trend_volume_figure(trend, granularity), width="stretch", config={"displayModeBar": False})
+        with col2:
+            st.plotly_chart(build_trend_rate_figure(trend, granularity, thresholds), width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(build_cumulative_ca_figure(trend, granularity), width="stretch", config={"displayModeBar": False})
+        st.caption("La premi\u00e8re et la derni\u00e8re barre peuvent couvrir une semaine ou un mois incomplet. Les taux de livraison des p\u00e9riodes r\u00e9centes montent encore tant que des colis sont en route.")
+        with st.expander("Voir le tableau d'évolution", expanded=False):
+            table = trend.drop(columns=["ca_livre_cumule"]).copy()
+            table["periode"] = table["periode"].dt.strftime("%Y/%m/%d")
+            table = table.rename(columns={"periode": "Période", "commandes_confirmees": "Confirmées"})
+            render_data_table(table, list(table.columns), thresholds, "Aucune donnée.")
+    except Exception as exc:  # never let the new section break the existing dashboard
+        st.warning(f"Section évolution indisponible pour ce fichier : {exc}")
+
 
 def build_export(metrics: dict, tables: dict[str, pd.DataFrame], clean_df: pd.DataFrame) -> bytes:
     output = BytesIO()
@@ -2127,6 +2316,7 @@ def run_app() -> None:
         render_date_context(date_context)
         render_active_filters_banner(date_context)
         render_owner_global_dashboard(df, global_metrics, thresholds, priority_actions)
+        render_trend_section(df, loaded_df, date_context, global_metrics, thresholds)
 
     with tabs[1]:
         tab_header("Confirmation", "Qualite des confirmatrices et transformation reelle par cohorte.")
