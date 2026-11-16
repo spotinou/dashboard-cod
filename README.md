@@ -26,17 +26,35 @@ Les commandes en préparation ne sont jamais comptées dans la performance livre
 
 ## Structure
 
+Calculs (aucun affichage) :
+
 - `app.py` : point d'entrée Streamlit.
 - `src/data_loader.py` : lecture Excel, mapping flexible des colonnes.
 - `src/cleaning.py` : nettoyage texte, montants, dates, normalisations.
 - `src/classification.py` : classification COD.
 - `src/metrics.py` : agrégations et KPI.
+- `src/validation.py` : contrôles de cohérence des chiffres.
 - `src/alerts.py` : alertes décisionnelles.
 - `src/flows.py` : entonnoir COD et cascade du chiffre d'affaires.
 - `src/rankings.py` : classements (livreurs, confirmatrices, produits, wilayas).
 - `src/trends.py` : évolution dans le temps et comparaison avec la période précédente.
-- `src/ui.py` : interface Streamlit et exports.
-- `tests/test_metrics.py` : tests unitaires métier.
+
+Affichage (`src/views/`, un fichier par thème) :
+
+- `app.py` : lancement de l'app, chargement du fichier, calcul des tableaux (`compute_dashboard_data`).
+- `tabs.py` : une fonction par onglet (`render_global_tab`, `render_confirmation_tab`…).
+- `filters.py` : période d'analyse, type de date et filtres de la barre latérale.
+- `analysis.py` : analyses du dashboard (conseils produits, croisements, résumés, export Excel).
+- `overview.py` : cartes KPI de la Vue globale.
+- `evolution.py`, `ranking_charts.py`, `flow_charts.py` : graphiques d'évolution, classements, entonnoir et cascade.
+- `charts.py` : anciens graphiques en barres (conservés).
+- `components.py` : briques réutilisables (cartes, titres, tableaux).
+- `formatting.py` : formats (DA, %, dates), couleurs et préparation des tableaux.
+- `styles.py` : CSS du dashboard.
+
+`src/ui.py` réexporte tout (compatibilité : `from src.ui import ...` fonctionne toujours).
+
+Tests : `tests/` (un fichier par module).
 
 ## Tests
 
