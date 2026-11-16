@@ -21,6 +21,15 @@ from .metrics import (
     compute_product_wilaya_alerts,
     compute_wilaya_metrics,
 )
+from .rankings import (
+    OTHERS_LABEL,
+    amount_concentration,
+    amount_ranking_rows,
+    pooled_rate,
+    rate_ranking_reading,
+    rate_ranking_rows,
+    rate_tone,
+)
 from .trends import (
     GRANULARITY_FREQ,
     TREND_CHARTS,
@@ -2185,6 +2194,162 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
         st.warning(f"Section évolution indisponible pour ce fichier : {exc}")
 
 
+RANK_TONE_COLORS = {"good": "#16a34a", "bad": "#dc2626", "neutral": "#94a3b8"}
+RANK_LABEL_MAX = 26
+
+
+def short_label(value, limit: int = RANK_LABEL_MAX) -> str:
+    text = str(value)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def render_chart_header(title: str, explanation: str, pill: str, sentence_html: str, min_height: int = 92) -> None:
+    bg, fg = TREND_TONE_COLORS["neutral"]
+    st.markdown(
+        f"""
+        <div style="margin:6px 0 0;min-height:{min_height}px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span style="font-size:15px;font-weight:850;color:#0f172a">{html_text(title)}</span>
+            <span style="background:{bg};color:{fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{html_text(pill)}</span>
+          </div>
+          <div style="font-size:11.5px;color:#64748b;margin-top:1px">{explanation}</div>
+          <div style="font-size:12.5px;color:#334155;margin-top:4px;line-height:1.45">{sentence_html}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _ranking_layout(fig, rows_count: int, x_max: float):
+    fig.update_layout(
+        height=max(140, 34 * rows_count + 40),
+        showlegend=False,
+        hovermode="closest",
+        separators=", ",
+        bargap=0.3,
+        barcornerradius=4,
+        margin={"l": 8, "r": 8, "t": 8, "b": 8},
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        hoverlabel={"bgcolor": "#ffffff", "font": {"color": "#0f172a", "size": 12}},
+    )
+    fig.update_xaxes(visible=False, range=[0, x_max])
+    fig.update_yaxes(autorange="reversed", showgrid=False, ticks="", tickfont={"size": 12, "color": "#334155"})
+    return fig
+
+
+def build_rate_ranking_figure(rows: pd.DataFrame, label_col: str, rate_col: str, volume_col: str, volume_label: str, average, higher_is_better: bool = True):
+    """Every reliable entry as one horizontal bar, best on top, coloured against the average."""
+    if rows.empty:
+        return None
+    rates = pd.to_numeric(rows[rate_col], errors="coerce")
+    tones = [rate_tone(value, average, higher_is_better) for value in rates]
+    volumes = pd.to_numeric(rows[volume_col], errors="coerce").fillna(0).astype(int)
+    fig = go.Figure()
+    fig.add_bar(
+        x=rates,
+        y=[short_label(value) for value in rows[label_col]],
+        orientation="h",
+        marker_color=[RANK_TONE_COLORS[tone] for tone in tones],
+        text=[f"{pct(rate)} · {volume} {volume_label}" for rate, volume in zip(rates, volumes)],
+        textposition="outside",
+        textfont={"color": "#334155", "size": 12},
+        cliponaxis=False,
+        hovertext=[f"<b>{html_text(label)}</b><br>{pct(rate)}<br>{volume} {volume_label}" for label, rate, volume in zip(rows[label_col], rates, volumes)],
+        hoverinfo="text",
+    )
+    if average is not None and not pd.isna(average):
+        fig.add_vline(x=float(average), line_color=TREND_AVERAGE_COLOR, line_width=1, line_dash="dash", layer="below")
+    top = max(float(rates.max()) if not rates.dropna().empty else 0.0, float(average or 0.0))
+    return _ranking_layout(fig, len(rows), max(top * 1.55, 0.1))
+
+
+def build_amount_ranking_figure(rows: pd.DataFrame, label_col: str, value_col: str, color: str):
+    """Biggest amounts first, with their share of the total; the tail is one grey "Autres" bar."""
+    if rows.empty:
+        return None
+    values = pd.to_numeric(rows[value_col], errors="coerce").fillna(0)
+    is_others = rows[label_col].eq(OTHERS_LABEL)
+    labels = [
+        f"{OTHERS_LABEL} ({int(n)})" if other else short_label(label)
+        for label, other, n in zip(rows[label_col], is_others, rows.get("nb_regroupes", pd.Series(0, index=rows.index)))
+    ]
+    fig = go.Figure()
+    fig.add_bar(
+        x=values,
+        y=labels,
+        orientation="h",
+        marker_color=[RANK_TONE_COLORS["neutral"] if other else color for other in is_others],
+        text=[f"{money(value)} · {pct(part)}" for value, part in zip(values, rows["part"])],
+        textposition="outside",
+        textfont={"color": "#334155", "size": 12},
+        cliponaxis=False,
+        hovertext=[f"<b>{html_text(label)}</b><br>{money(value)}<br>{pct(part)} du total" for label, value, part in zip(rows[label_col], values, rows["part"])],
+        hoverinfo="text",
+    )
+    return _ranking_layout(fig, len(rows), max(float(values.max()) * 1.6, 1.0))
+
+
+def render_rate_ranking(
+    table: pd.DataFrame,
+    label_col: str,
+    rate_col: str,
+    numerator_col: str,
+    denominator_col: str,
+    volume_col: str,
+    volume_label: str,
+    volume_min: int,
+    title: str,
+    explanation: str,
+    higher_is_better: bool,
+    key: str,
+) -> None:
+    """Ranking of a rate: best and worst visible, volume next to each value, company average as reference."""
+    try:
+        average = pooled_rate(table, numerator_col, denominator_col)
+        rows, hidden_low, hidden_middle = rate_ranking_rows(table, label_col, rate_col, volume_col, volume_min, higher_is_better)
+        reading = rate_ranking_reading(rows, label_col, rate_col)
+        better = "plus haut = mieux" if higher_is_better else "plus bas = mieux"
+        if reading["best"] is None:
+            sentence = "Pas assez de volume pour classer."
+        else:
+            sentence = f"Meilleur : <b>{html_text(reading['best'][0])}</b> ({html_text(pct(reading['best'][1]))})"
+            if reading["worst"] is not None:
+                sentence += f"<br>Moins bon : <b>{html_text(reading['worst'][0])}</b> ({html_text(pct(reading['worst'][1]))})"
+        render_chart_header(title, f"{html_text(explanation)} · <b>{better}</b>", f"Moyenne {pct(average)}", sentence)
+        fig = build_rate_ranking_figure(rows, label_col, rate_col, volume_col, volume_label, average, higher_is_better)
+        if fig is None:
+            st.info(f"Aucune ligne avec au moins {volume_min} {volume_label} : pas assez de volume pour un classement fiable.")
+        else:
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key=key)
+        notes = ["Vert = mieux que la moyenne, rouge = moins bien, gris = dans la moyenne (±2 pts). Ligne grise = moyenne."]
+        if hidden_middle:
+            notes.append(f"{hidden_middle} lignes du milieu du classement masquées (voir le tableau).")
+        if hidden_low:
+            notes.append(f"{hidden_low} non affiché(s) : moins de {volume_min} {volume_label}, pas assez pour juger.")
+        st.caption(" ".join(notes))
+    except Exception as exc:  # a chart must never break the tab
+        st.warning(f"Graphique indisponible : {exc}")
+
+
+def render_amount_ranking(table: pd.DataFrame, label_col: str, value_col: str, title: str, explanation: str, color: str, key: str) -> None:
+    """Ranking of an amount (CA): biggest first, share of total, tail grouped in "Autres"."""
+    try:
+        rows, total = amount_ranking_rows(table, label_col, value_col)
+        if rows.empty:
+            render_chart_header(title, html_text(explanation), f"Total {money(0)}", "Aucun montant sur le périmètre.")
+            return
+        first = rows.iloc[0]
+        top3 = amount_concentration(rows, label_col, value_col, total)
+        sentence = f"Plus gros : <b>{html_text(first[label_col])}</b> ({html_text(money(first[value_col]))}, {html_text(pct(first['part']))})"
+        if top3 is not None and int((rows[label_col] != OTHERS_LABEL).sum()) > 3:
+            sentence += f"<br>Les 3 premiers = <b>{html_text(pct(top3))}</b> du total"
+        render_chart_header(title, html_text(explanation), f"Total {money(total)}", sentence)
+        st.plotly_chart(build_amount_ranking_figure(rows, label_col, value_col, color), width="stretch", config={"displayModeBar": False}, key=key)
+    except Exception as exc:  # a chart must never break the tab
+        st.warning(f"Graphique indisponible : {exc}")
+
+
 def build_export(metrics: dict, tables: dict[str, pd.DataFrame], clean_df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -2423,9 +2588,11 @@ def run_app() -> None:
             row = confirmation_view.iloc[idx]
             show_drilldown(df, "confirmatrice", "Affectée à", row["confirmatrice"], "Commandes annulees", "confirmation")
 
-        chart_df = reliable_rows(confirmation_display, "confirmatrice", "commandes_recues", volume_confirmatrice)
-        if not chart_df.empty:
-            percent_bar(chart_df, "confirmatrice", "taux_transformation_reel", "Taux transformation reel par confirmatrice")
+        render_rate_ranking(
+            confirmation_display, "confirmatrice", "taux_transformation_reel", "livrees", "commandes_recues",
+            "commandes_recues", "reçues", volume_confirmatrice,
+            "Classement des confirmatrices", "Sur 100 commandes reçues, combien finissent livrées", True, "rank_confirmatrice",
+        )
         with st.expander("Analyse Confirmatrice x Produit", expanded=False):
             cp_cols = ["confirmatrice", "produit", "fiabilite_volume", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_retours", "lecture_rapide"]
             render_data_table(confirmatrice_product_detail, cp_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["confirmatrice", "commandes_recues"])
@@ -2466,14 +2633,15 @@ def run_app() -> None:
             compare_cols = ["wilaya", "livreur_dominant", "expediees_dominant", "taux_livraison_dominant", "taux_retour_dominant", "livreur_alternatif", "expediees_alternatif", "taux_livraison_alternatif", "taux_retour_alternatif", "ecart_livraison", "ecart_retour", "fiabilite_comparaison", "lecture_rapide"]
             render_data_table(wilaya_livreur_compare, compare_cols, thresholds, "Aucune comparaison disponible avec les filtres actuels.", sort_by="wilaya")
 
-        if not reliable_livreurs.empty:
-            col1, col2 = st.columns(2)
-            with col1:
-                percent_bar(reliable_livreurs, "livreur", "taux_livraison_total", "Taux livraison sur expediees par livreur")
-            with col2:
-                amount_bar(reliable_livreurs, "livreur", "ca_retours", "Perte CA retours par livreur")
-        else:
-            st.info("Aucun livreur avec un volume suffisant pour un classement fiable.")
+        col1, col2 = st.columns(2, gap="medium")
+        with col1:
+            render_rate_ranking(
+                livreurs_ui, "livreur", "taux_livraison_total", "livrees", "commandes_envoyees",
+                "commandes_envoyees", "expédiées", volume_sent,
+                "Taux de livraison par livreur", "Sur 100 colis expédiés, combien livrés", True, "rank_livreur",
+            )
+        with col2:
+            render_amount_ranking(livreurs_ui, "livreur", "ca_retours", "Perte CA retours par livreur", "Montant des colis revenus, par livreur", "#ef4444", "amount_livreur_retours")
         with st.expander("Voir detail complet livreurs", expanded=False):
             render_data_table(livreurs_ui, list(livreurs_ui.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
         decision_summary("Résumé décisionnel", delivery_summary(livreurs_ui, volume_sent))
@@ -2521,11 +2689,16 @@ def run_app() -> None:
             sku_cols = ["sku_produit", "produit_associe", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
             render_data_table(sku_performance, sku_cols, thresholds, "Aucune donnee SKU exploitable.", sort_by="ca_livre")
 
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2, gap="medium")
         with col1:
-            amount_bar(reliable_products, "produit", "ca_livre", "Top CA livre par produit")
+            render_amount_ranking(products_ui, "produit", "ca_livre", "CA livré par produit", "Montant des colis livrés, par produit", TREND_ACCENT, "amount_produit_livre")
         with col2:
-            amount_bar(reliable_products, "produit", "ca_retours", "Top Perte CA retours par produit")
+            render_amount_ranking(products_ui, "produit", "ca_retours", "Perte CA retours par produit", "Montant des colis revenus, par produit", "#ef4444", "amount_produit_retours")
+        render_rate_ranking(
+            products_ui, "produit", "taux_retour", "retours", "commandes_envoyees",
+            "commandes_envoyees", "expédiées", volume_product,
+            "Taux de retour par produit", "Sur 100 colis expédiés, combien reviennent", False, "rank_produit_retour",
+        )
         with st.expander("Voir detail complet produits", expanded=False):
             render_data_table(products_advice, list(products_advice.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="ca_livre")
         decision_summary("Résumé décisionnel", product_summary(products_ui, volume_product))
@@ -2542,6 +2715,12 @@ def run_app() -> None:
             ("En cours logistique", global_metrics.get("orders_logistics", 0), f"{pct(global_metrics.get('logistics_rate_on_sent'))} des expediees", "warn"),
             ("Livraison / expediees", pct(global_metrics["delivery_total_rate_on_sent"]), f"{global_metrics['orders_delivered']} livrees / {global_metrics['orders_sent']} expediees", tone_class(global_metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
         ])
+
+        render_rate_ranking(
+            wilayas_ui, "wilaya", "taux_livraison_total", "livrees", "commandes_envoyees",
+            "commandes_envoyees", "expédiées", volume_sent,
+            "Taux de livraison par wilaya", "Sur 100 colis expédiés, combien livrés", True, "rank_wilaya",
+        )
 
         cockpit_heading("Top CA livre", "Wilayas qui securisent le plus de CA.")
         top_wilaya_cols = ["wilaya", "commandes_recues", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "taux_retour", "ca_livre", "ca_dispatch", "produit_dominant", "livreur_dominant", "fiabilite_volume"]
