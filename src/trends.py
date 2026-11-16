@@ -29,7 +29,15 @@ TREND_COLUMNS = [
     "taux_transformation_reel",
     "ca_livre",
     "ca_livre_cumule",
+    "periode_fin",
+    "periode_incomplete",
+    "colis_en_route",
+    "part_en_route",
 ]
+
+# A period whose shipped parcels are still more than this share "on the road" has
+# delivery figures that will still move: it is shown as provisional on the charts.
+PROVISIONAL_IN_TRANSIT_SHARE = 0.15
 
 
 def exclusive_confirmed(metrics: dict) -> int:
@@ -44,9 +52,9 @@ def auto_granularity(start, end) -> str:
     if start is None or end is None:
         return "Jour"
     days = (pd.Timestamp(end) - pd.Timestamp(start)).days + 1
-    if days <= 45:
+    if days <= 14:
         return "Jour"
-    if days <= 200:
+    if days <= 120:
         return "Semaine"
     return "Mois"
 
@@ -63,7 +71,15 @@ def order_period_keys(df: pd.DataFrame, date_col: str, granularity: str) -> pd.S
     return order_date.dt.to_period(freq).dt.start_time
 
 
-def compute_trend(df: pd.DataFrame, date_col: str | None, granularity: str = "Jour") -> pd.DataFrame:
+def period_end(period_start: pd.Timestamp, granularity: str) -> pd.Timestamp:
+    freq = GRANULARITY_FREQ.get(granularity, "D")
+    if freq == "D":
+        return period_start
+    return pd.Timestamp(period_start).to_period(freq).end_time.normalize()
+
+
+def compute_trend(df: pd.DataFrame, date_col: str | None, granularity: str = "Jour", start=None, end=None) -> pd.DataFrame:
+    """One row per period. ``start``/``end`` (the analysis window) flag periods that are cut by it."""
     if df.empty or not date_col or date_col not in df.columns:
         return pd.DataFrame(columns=TREND_COLUMNS)
     keys = order_period_keys(df, date_col, granularity)
@@ -88,10 +104,21 @@ def compute_trend(df: pd.DataFrame, date_col: str | None, granularity: str = "Jo
                 "taux_retour": m["return_rate_on_sent"],
                 "taux_transformation_reel": m["transformation_real_rate"],
                 "ca_livre": m["ca_delivered"],
+                "periode_fin": period_end(pd.Timestamp(period), granularity),
+                "colis_en_route": max(int(m["orders_sent"]) - int(m["orders_delivered"]) - int(m["orders_returned_failed"]), 0),
             }
         )
     out = pd.DataFrame(rows)
     out["ca_livre_cumule"] = out["ca_livre"].cumsum()
+    incomplete = pd.Series(False, index=out.index)
+    if start is not None:
+        incomplete |= out["periode"] < pd.Timestamp(start)
+    if end is not None:
+        incomplete |= out["periode_fin"] > pd.Timestamp(end)
+    out["periode_incomplete"] = incomplete
+    out["part_en_route"] = [
+        safe_divide(float(c), float(s)) for c, s in zip(out["colis_en_route"], out["commandes_envoyees"])
+    ]
     return out[TREND_COLUMNS]
 
 
@@ -169,3 +196,78 @@ def compute_period_comparison(current: dict, previous: dict | None) -> list[dict
             }
         )
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Reading helpers for the evolution charts (one chart = one metric).
+# ---------------------------------------------------------------------------
+
+# key, title, explanation, kind, higher_is_better, chart form, depends on delivery outcome
+TREND_CHARTS = [
+    ("commandes_recues", "Commandes reçues", "Commandes entrées", "count", True, "bar", False),
+    ("livrees", "Commandes livrées", "Colis livrés au client", "count", True, "bar", True),
+    ("ca_livre", "CA livré", "Montant des colis livrés", "money", True, "bar", True),
+    ("taux_confirmation", "Taux confirmé", "Sur 100 reçues, combien confirmées", "rate", True, "line", False),
+    ("taux_livraison_finalisees", "Taux de livraison", "Sur 100 colis finalisés, combien livrés", "rate", True, "line", True),
+    ("taux_retour", "Taux de retour", "Sur 100 expédiés, combien reviennent", "rate", False, "line", True),
+]
+
+# Rates are averaged as total numerator / total denominator (not a mean of daily rates),
+# exactly like the global KPI cards.
+RATE_PARTS = {
+    "taux_confirmation": ("commandes_confirmees", ["commandes_recues"]),
+    "taux_livraison_finalisees": ("livrees", ["livrees", "retours"]),
+    "taux_retour": ("retours", ["commandes_envoyees"]),
+    "taux_transformation_reel": ("livrees", ["commandes_recues"]),
+}
+
+# Below these changes vs the average, the last period is read as "stable".
+STABLE_RATE_PTS = 0.02
+STABLE_RELATIVE = 0.10
+
+
+def provisional_mask(trend: pd.DataFrame, depends_on_delivery: bool) -> pd.Series:
+    """True for periods whose value is not final: cut by the analysis window, or
+    (for delivery figures) with too many parcels still on the road."""
+    if trend.empty:
+        return pd.Series(dtype=bool)
+    mask = trend["periode_incomplete"].fillna(False).astype(bool)
+    if depends_on_delivery:
+        in_transit = pd.to_numeric(trend["part_en_route"], errors="coerce").fillna(0)
+        mask = mask | in_transit.gt(PROVISIONAL_IN_TRANSIT_SHARE)
+    return mask
+
+
+def trend_average(trend: pd.DataFrame, key: str, mask: pd.Series | None = None):
+    """Average over the given rows (all rows when mask is None)."""
+    rows = trend if mask is None else trend[mask]
+    if rows.empty:
+        return None
+    if key in RATE_PARTS:
+        numerator, denominators = RATE_PARTS[key]
+        return safe_divide(float(rows[numerator].sum()), float(rows[denominators].sum().sum()))
+    values = pd.to_numeric(rows[key], errors="coerce").dropna()
+    return float(values.mean()) if not values.empty else None
+
+
+def trend_reading(trend: pd.DataFrame, key: str, kind: str, higher_is_better: bool, depends_on_delivery: bool) -> dict:
+    """Plain-language reading: last reliable period vs the average of reliable periods."""
+    provisional = provisional_mask(trend, depends_on_delivery)
+    reliable = ~provisional
+    reading = {"average": None, "last_value": None, "last_period": None, "direction": None, "tone": "neutral", "provisional_count": int(provisional.sum())}
+    if trend.empty or not reliable.any():
+        return reading
+    average = trend_average(trend, key, reliable)
+    last = trend[reliable].iloc[-1]
+    last_value = last[key]
+    reading.update({"average": average, "last_value": last_value, "last_period": last["periode"]})
+    if average is None or last_value is None or pd.isna(last_value) or int(reliable.sum()) < 2:
+        return reading
+    gap = float(last_value) - float(average)
+    stable = abs(gap) < STABLE_RATE_PTS if kind == "rate" else (abs(gap) < STABLE_RELATIVE * abs(float(average)) if average else gap == 0)
+    if stable:
+        reading.update({"direction": "flat", "tone": "neutral"})
+    else:
+        reading["direction"] = "up" if gap > 0 else "down"
+        reading["tone"] = "good" if (gap > 0) == higher_is_better else "bad"
+    return reading

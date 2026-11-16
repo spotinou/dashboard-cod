@@ -6,16 +6,18 @@ import pytest
 from src.data_loader import prepare_dataframe
 from src.metrics import compute_global_metrics
 from src.trends import (
+    TREND_CHARTS,
     auto_granularity,
+    provisional_mask,
+    trend_average,
+    trend_reading,
     compute_period_comparison,
     compute_trend,
     previous_period,
 )
 from src.ui import (
     apply_filter_values,
-    build_cumulative_ca_figure,
-    build_trend_rate_figure,
-    build_trend_volume_figure,
+    build_metric_trend_figure,
     comparison_cards,
     format_delta,
     previous_period_frame,
@@ -101,7 +103,8 @@ def test_previous_period_same_length():
 
 
 def test_auto_granularity():
-    assert auto_granularity(date(2026, 1, 1), date(2026, 1, 30)) == "Jour"
+    assert auto_granularity(date(2026, 1, 1), date(2026, 1, 14)) == "Jour"
+    assert auto_granularity(date(2026, 1, 1), date(2026, 1, 30)) == "Semaine"
     assert auto_granularity(date(2026, 1, 1), date(2026, 4, 30)) == "Semaine"
     assert auto_granularity(date(2025, 1, 1), date(2026, 1, 1)) == "Mois"
 
@@ -162,13 +165,64 @@ def test_apply_filter_values_ignores_missing_columns():
     assert set(apply_filter_values(df, [("Nom produit", ["P2"])])["order_id"]) == {"E"}
 
 
-def test_trend_figures():
+def test_trend_figures_one_metric_per_chart():
     trend = compute_trend(build_df(), "Crée le", "Jour")
-    volume = build_trend_volume_figure(trend)
-    assert [trace.name for trace in volume.data] == ["Reçues", "Confirmées", "Livrées", "Retours / échecs"]
-    rates = build_trend_rate_figure(trend, thresholds={"delivery_green": 0.7})
-    assert rates.layout.yaxis.tickformat == ".0%"
-    assert len(rates.layout.shapes) == 1
-    ca = build_cumulative_ca_figure(trend)
-    assert list(ca.data[1].y)[-1] == 12000
-    assert build_trend_volume_figure(trend.head(1)) is None
+    for key, _, _, kind, _, form, depends in TREND_CHARTS:
+        fig = build_metric_trend_figure(trend, key, kind, form, depends, "Jour", average=trend_average(trend, key))
+        assert fig is not None
+        assert fig.layout.showlegend is False
+        assert len(fig.layout.shapes) == 1  # the average line
+    bars = build_metric_trend_figure(trend, "commandes_recues", "count", "bar", False)
+    assert [trace.type for trace in bars.data] == ["bar"]
+    assert list(bars.data[0].y) == [2, 1, 1, 2]
+    rate = build_metric_trend_figure(trend, "taux_confirmation", "rate", "line", False)
+    assert rate.layout.yaxis.tickformat == ".0%"
+    assert build_metric_trend_figure(trend.head(1), "commandes_recues", "count", "bar", False) is None
+
+
+def test_trend_flags_incomplete_and_in_transit_periods():
+    df = build_df()
+    trend = compute_trend(df, "Crée le", "Semaine", start=date(2026, 1, 1), end=date(2026, 1, 4))
+    # The week of 2025-12-29 starts before the analysis window and ends after it
+    assert bool(trend["periode_incomplete"].iloc[0]) is True
+    daily = compute_trend(df, "Crée le", "Jour", start=date(2026, 1, 1), end=date(2026, 1, 4))
+    assert not daily["periode_incomplete"].any()
+    day4 = daily.set_index("periode").loc[pd.Timestamp("2026-01-04")]
+    assert day4["colis_en_route"] == 1  # F is still "En livraison"
+    assert day4["part_en_route"] == 0.5
+    mask = provisional_mask(daily, depends_on_delivery=True)
+    assert list(mask) == [False, False, False, True]
+    assert not provisional_mask(daily, depends_on_delivery=False).any()
+
+
+def test_rate_average_is_pooled_like_global_kpis():
+    df = build_df()
+    trend = compute_trend(df, "Crée le", "Jour")
+    metrics = compute_global_metrics(df)
+    assert trend_average(trend, "taux_livraison_finalisees") == pytest.approx(metrics["delivery_finalized_rate"])
+    assert trend_average(trend, "taux_retour") == pytest.approx(metrics["return_rate_on_sent"])
+    assert trend_average(trend, "commandes_recues") == pytest.approx(1.5)
+
+
+def test_trend_reading_uses_last_reliable_period():
+    trend = compute_trend(build_df(), "Crée le", "Jour", start=date(2026, 1, 1), end=date(2026, 1, 4))
+    reading = trend_reading(trend, "taux_livraison_finalisees", "rate", True, True)
+    # Jan 4 is provisional (parcel in transit), so the reading stops at Jan 3
+    assert reading["last_period"] == pd.Timestamp("2026-01-03")
+    assert reading["provisional_count"] == 1
+    assert reading["last_value"] == 1.0
+    assert reading["direction"] == "up" and reading["tone"] == "good"
+    returns = trend_reading(trend, "taux_retour", "rate", False, True)
+    assert returns["direction"] == "down" and returns["tone"] == "good"
+
+
+def test_previous_period_partially_before_file_is_not_compared():
+    df = build_df()
+    # Current = Jan 3 -> Jan 4, previous = Jan 1 -> Jan 2: fully inside the file -> compared
+    context = {"selected_date_type": "Date de création", "start_date": date(2026, 1, 3), "end_date": date(2026, 1, 4)}
+    prev_df, _ = previous_period_frame(df, context)
+    assert prev_df is not None
+    # Current = Jan 2 -> Jan 4, previous = Dec 30 -> Jan 1: only 1 of 3 days in the file -> not compared
+    context["start_date"] = date(2026, 1, 2)
+    prev_df, window = previous_period_frame(df, context)
+    assert prev_df is None and window == (date(2025, 12, 30), date(2026, 1, 1))
