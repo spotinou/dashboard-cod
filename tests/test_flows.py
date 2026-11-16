@@ -2,9 +2,9 @@ import pandas as pd
 import pytest
 
 from src.data_loader import prepare_dataframe
-from src.flows import LOST, PENDING, SECURED, funnel_stages, revenue_waterfall, waterfall_summary
+from src.flows import funnel_stages, order_status_split
 from src.metrics import compute_global_metrics
-from src.ui import amount_totals, build_revenue_waterfall_figure, confirmation_funnel_counts, funnel_html
+from src.ui import confirmation_funnel_counts, order_status_cards_html
 
 
 def build_df():
@@ -50,44 +50,28 @@ def test_funnel_shows_unexplained_gap_as_autres():
     assert dict(stages[2]["loss_breakdown"]) == {"encore en livraison": 1, "autres": 1}
 
 
-def test_waterfall_closes_on_delivered_revenue():
-    df = build_df()
-    metrics = compute_global_metrics(df)
-    steps = revenue_waterfall(metrics, amount_totals(df, metrics))
-    labels = [s["label"] for s in steps]
-    assert labels == ["CA des commandes reçues", "Annulées", "Encore en confirmation", "En préparation", "En cours de livraison", "Retours / échecs", "CA livré"]
-    assert steps[0]["value"] == 22500
-    assert [-s["value"] for s in steps[1:-1]] == [1000, 1500, 2000, 6000, 5000]
-    assert steps[-1]["value"] == metrics["ca_delivered"] == 7000
-    # the last deduction ends exactly where the delivered revenue bar ends
-    assert steps[-2]["start"] == pytest.approx(steps[-1]["end"])
-    assert steps[0]["value"] + sum(s["value"] for s in steps[1:-1]) == pytest.approx(steps[-1]["value"])
+def test_order_status_split_adds_up_to_orders_received():
+    metrics = compute_global_metrics(build_df())
+    split = order_status_split(metrics)
+    assert split["received"] == metrics["orders_received"] == 7
+    assert split["delivered"]["count"] == metrics["orders_delivered"] == 2
+    assert dict(split["in_progress"]["detail"]) == {"en confirmation": 1, "en préparation": 1, "en livraison": 1}
+    assert dict(split["lost"]["detail"]) == {"annulées": 1, "retours": 1}
+    total = split["delivered"]["count"] + split["in_progress"]["count"] + split["lost"]["count"]
+    assert total == split["received"]
+    assert split["delivered"]["share"] + split["in_progress"]["share"] + split["lost"]["share"] == pytest.approx(1.0)
+    assert split["delivered"]["share"] == pytest.approx(metrics["transformation_real_rate"])
 
 
-def test_waterfall_summary_by_tone():
-    df = build_df()
-    metrics = compute_global_metrics(df)
-    summary = waterfall_summary(revenue_waterfall(metrics, amount_totals(df, metrics)))
-    assert summary[LOST][0] == 6000  # cancelled + returns
-    assert summary[PENDING][0] == 9500  # confirmation + preparation + in delivery
-    assert summary[SECURED][0] == 7000
-    assert sum(summary[tone][1] for tone in (LOST, PENDING, SECURED)) == pytest.approx(1.0)
+def test_order_status_split_keeps_unexplained_orders_in_progress():
+    metrics = compute_global_metrics(build_df())
+    metrics["orders_returned_failed"] = 0  # 1 shipped parcel now unexplained
+    split = order_status_split(metrics)
+    assert dict(split["in_progress"]["detail"])["autres"] == 1
+    assert split["delivered"]["count"] + split["in_progress"]["count"] + split["lost"]["count"] == split["received"]
 
 
-def test_waterfall_shows_remainder_instead_of_hiding_it():
-    metrics = {"ca_delivered": 1000, "ca_in_confirmation": 0, "ca_preparation": 0, "ca_logistics": 0, "ca_returned_failed": 500}
-    amounts = {"ca_total_orders": 2000, "ca_confirmed": 2000}
-    steps = revenue_waterfall(metrics, amounts)
-    assert [s["label"] for s in steps] == ["CA des commandes reçues", "Retours / échecs", "Autres / non classées", "CA livré"]
-    assert steps[2]["value"] == -500
-
-
-def test_flow_rendering_helpers():
-    df = build_df()
-    metrics = compute_global_metrics(df)
-    html = funnel_html(funnel_stages(metrics))
-    assert "Commandes reçues" in html and "1 annulées" in html and "sortent ici" in html
-    fig = build_revenue_waterfall_figure(revenue_waterfall(metrics, amount_totals(df, metrics)))
-    assert fig.data[0].orientation == "h"
-    assert fig.data[0].text[1].startswith("− 1 000 DA")
-    assert build_revenue_waterfall_figure([]) is None
+def test_order_status_cards_html():
+    html = order_status_cards_html(order_status_split(compute_global_metrics(build_df())))
+    assert "Livrées" in html and "En cours" in html and "Perdues" in html
+    assert "1 annulées" in html and "1 en livraison" in html

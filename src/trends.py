@@ -25,6 +25,7 @@ TREND_COLUMNS = [
     "retours",
     "taux_confirmation",
     "taux_livraison_finalisees",
+    "taux_livraison_total",
     "taux_retour",
     "taux_transformation_reel",
     "ca_livre",
@@ -101,6 +102,7 @@ def compute_trend(df: pd.DataFrame, date_col: str | None, granularity: str = "Jo
                 "retours": m["orders_returned_failed"],
                 "taux_confirmation": safe_divide(float(confirmed), float(m["orders_received"])),
                 "taux_livraison_finalisees": m["delivery_finalized_rate"],
+                "taux_livraison_total": m["delivery_total_rate_on_sent"],
                 "taux_retour": m["return_rate_on_sent"],
                 "taux_transformation_reel": m["transformation_real_rate"],
                 "ca_livre": m["ca_delivered"],
@@ -143,11 +145,18 @@ RELATIVE_NOISE = 0.02  # 2 %
 COMPARISON_METRICS = [
     ("orders_received", "Commandes reçues", "count", True),
     ("confirmation_display_rate", "Taux confirmé", "rate", True),
-    ("delivery_finalized_rate", "Taux livraison finalisée", "rate", True),
-    ("return_rate_on_sent", "Taux retour (sur expédiées)", "rate", False),
-    ("transformation_real_rate", "Transformation brute", "rate", True),
-    ("ca_delivered", "CA livré", "money", True),
+    ("delivery_total_rate_on_sent", "Taux livré", "rate", True),
+    ("return_rate_on_sent", "Taux retour", "rate", False),
 ]
+# Indicators that keep moving while parcels are still on the road.
+DELIVERY_DEPENDENT = {"delivery_total_rate_on_sent", "return_rate_on_sent"}
+
+
+def in_transit_share(metrics: dict) -> float | None:
+    """Share of shipped parcels that are neither delivered nor returned yet."""
+    sent = int(metrics.get("orders_sent", 0) or 0)
+    done = int(metrics.get("orders_delivered", 0) or 0) + int(metrics.get("orders_returned_failed", 0) or 0)
+    return safe_divide(float(max(sent - done, 0)), float(sent))
 
 
 def comparison_values(metrics: dict) -> dict:
@@ -163,8 +172,12 @@ def compute_period_comparison(current: dict, previous: dict | None) -> list[dict
     For rates the delta is in percentage points; for counts and money it is a relative change.
     ``direction`` is 'up', 'down', 'flat' or None (no comparable previous value);
     ``tone`` is 'good', 'bad' or 'neutral' according to whether higher is better.
+    ``provisional`` is True for delivery figures while too many parcels of the current
+    period are still on the road: their delta is shown but not judged (neutral tone).
     """
     cur = comparison_values(current)
+    in_transit = in_transit_share(current)
+    still_moving = in_transit is not None and in_transit > PROVISIONAL_IN_TRANSIT_SHARE
     prev = comparison_values(previous) if previous and int(previous.get("orders_received", 0) or 0) > 0 else None
     rows = []
     for key, label, kind, higher_is_better in COMPARISON_METRICS:
@@ -183,6 +196,9 @@ def compute_period_comparison(current: dict, previous: dict | None) -> list[dict
         else:
             direction = "up" if delta > 0 else "down"
             tone = "good" if (delta > 0) == higher_is_better else "bad"
+        provisional = key in DELIVERY_DEPENDENT and still_moving
+        if provisional:
+            tone = "neutral"
         rows.append(
             {
                 "key": key,
@@ -193,6 +209,8 @@ def compute_period_comparison(current: dict, previous: dict | None) -> list[dict
                 "delta": delta,
                 "direction": direction,
                 "tone": tone,
+                "provisional": provisional,
+                "in_transit_share": in_transit if provisional else None,
             }
         )
     return rows
@@ -204,12 +222,10 @@ def compute_period_comparison(current: dict, previous: dict | None) -> list[dict
 
 # key, title, explanation, kind, higher_is_better, chart form, depends on delivery outcome
 TREND_CHARTS = [
-    ("commandes_recues", "Commandes reçues", "Commandes entrées", "count", True, "bar", False),
-    ("livrees", "Commandes livrées", "Colis livrés au client", "count", True, "bar", True),
-    ("ca_livre", "CA livré", "Montant des colis livrés", "money", True, "bar", True),
-    ("taux_confirmation", "Taux confirmé", "Sur 100 reçues, combien confirmées", "rate", True, "line", False),
-    ("taux_livraison_finalisees", "Taux de livraison", "Sur 100 colis finalisés, combien livrés", "rate", True, "line", True),
-    ("taux_retour", "Taux de retour", "Sur 100 expédiés, combien reviennent", "rate", False, "line", True),
+    ("commandes_recues", "Commandes reçues", "", "count", True, "bar", False),
+    ("taux_confirmation", "Taux confirmé", "", "rate", True, "line", False),
+    ("taux_livraison_total", "Taux livré", "", "rate", True, "line", True),
+    ("taux_retour", "Taux retour", "", "rate", False, "line", True),
 ]
 
 # Rates are averaged as total numerator / total denominator (not a mean of daily rates),
@@ -217,6 +233,7 @@ TREND_CHARTS = [
 RATE_PARTS = {
     "taux_confirmation": ("commandes_confirmees", ["commandes_recues"]),
     "taux_livraison_finalisees": ("livrees", ["livrees", "retours"]),
+    "taux_livraison_total": ("livrees", ["commandes_envoyees"]),
     "taux_retour": ("retours", ["commandes_envoyees"]),
     "taux_transformation_reel": ("livrees", ["commandes_recues"]),
 }

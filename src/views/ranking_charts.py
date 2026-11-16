@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ..rankings import OTHERS_LABEL, amount_concentration, amount_ranking_rows, pooled_rate, rate_ranking_reading, rate_ranking_rows, rate_tone
+from ..rankings import OTHERS_LABEL, amount_ranking_rows, pooled_rate, rate_ranking_rows, rate_tone
 from .formatting import TREND_AVERAGE_COLOR, html_text, money, pct
 from .components import render_chart_header
 
@@ -109,26 +109,24 @@ def render_rate_ranking(
     try:
         average = pooled_rate(table, numerator_col, denominator_col)
         rows, hidden_low, hidden_middle = rate_ranking_rows(table, label_col, rate_col, volume_col, volume_min, higher_is_better)
-        reading = rate_ranking_reading(rows, label_col, rate_col)
         better = "plus haut = mieux" if higher_is_better else "plus bas = mieux"
-        if reading["best"] is None:
-            sentence = "Pas assez de volume pour classer."
-        else:
-            sentence = f"Meilleur : <b>{html_text(reading['best'][0])}</b> ({html_text(pct(reading['best'][1]))})"
-            if reading["worst"] is not None:
-                sentence += f"<br>Moins bon : <b>{html_text(reading['worst'][0])}</b> ({html_text(pct(reading['worst'][1]))})"
-        render_chart_header(title, f"{html_text(explanation)} · <b>{better}</b>", f"Moyenne {pct(average)}", sentence)
+        legend = (
+            f'{better} \u00b7 <span style="color:{RANK_TONE_COLORS["good"]}">\u25a0</span> mieux que la moyenne '
+            f'\u00b7 <span style="color:{RANK_TONE_COLORS["bad"]}">\u25a0</span> moins bien'
+        )
+        render_chart_header(title, legend, f"Moyenne {pct(average)}")
         fig = build_rate_ranking_figure(rows, label_col, rate_col, volume_col, volume_label, average, higher_is_better)
         if fig is None:
-            st.info(f"Aucune ligne avec au moins {volume_min} {volume_label} : pas assez de volume pour un classement fiable.")
+            st.info(f"Pas assez de volume pour classer (minimum {volume_min} {volume_label}).")
         else:
             st.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key=key)
-        notes = ["Vert = mieux que la moyenne, rouge = moins bien, gris = dans la moyenne (±2 pts). Ligne grise = moyenne."]
+        notes = []
         if hidden_middle:
-            notes.append(f"{hidden_middle} lignes du milieu du classement masquées (voir le tableau).")
+            notes.append(f"{hidden_middle} du milieu du classement masqu\u00e9s.")
         if hidden_low:
-            notes.append(f"{hidden_low} non affiché(s) : moins de {volume_min} {volume_label}, pas assez pour juger.")
-        st.caption(" ".join(notes))
+            notes.append(f"{hidden_low} non affich\u00e9(s) : moins de {volume_min} {volume_label}.")
+        if notes:
+            st.caption(" ".join(notes))
     except Exception as exc:  # a chart must never break the tab
         st.warning(f"Graphique indisponible : {exc}")
 
@@ -138,14 +136,9 @@ def render_amount_ranking(table: pd.DataFrame, label_col: str, value_col: str, t
     try:
         rows, total = amount_ranking_rows(table, label_col, value_col)
         if rows.empty:
-            render_chart_header(title, html_text(explanation), f"Total {money(0)}", "Aucun montant sur le périmètre.")
+            render_chart_header(title, "Aucun montant sur le p\u00e9rim\u00e8tre.", f"Total {money(0)}")
             return
-        first = rows.iloc[0]
-        top3 = amount_concentration(rows, label_col, value_col, total)
-        sentence = f"Plus gros : <b>{html_text(first[label_col])}</b> ({html_text(money(first[value_col]))}, {html_text(pct(first['part']))})"
-        if top3 is not None and int((rows[label_col] != OTHERS_LABEL).sum()) > 3:
-            sentence += f"<br>Les 3 premiers = <b>{html_text(pct(top3))}</b> du total"
-        render_chart_header(title, html_text(explanation), f"Total {money(total)}", sentence)
+        render_chart_header(title, "Du plus gros au plus petit \u00b7 % = part du total", f"Total {money(total)}")
         st.plotly_chart(build_amount_ranking_figure(rows, label_col, value_col, color), width="stretch", config={"displayModeBar": False}, key=key)
     except Exception as exc:  # a chart must never break the tab
         st.warning(f"Graphique indisponible : {exc}")

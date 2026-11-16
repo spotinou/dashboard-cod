@@ -7,10 +7,11 @@ from .formatting import SENSITIVE_COLUMNS, TREND_ACCENT, adaptive_height, is_kno
 from .components import cockpit_heading, decision_summary, render_data_table, render_quality_badge, render_section_kpis, render_selectable_data_table, selected_index, show_drilldown, tab_header
 from .filters import render_active_filters_banner, render_date_context
 from .analysis import build_export, confirmation_summary, delivery_summary, product_summary, validation_summary, validation_value, wilaya_summary
+from ..rankings import group_card_rates
 from .overview import confirmation_funnel_counts, displayed_reception_rates, render_owner_global_dashboard
 from .evolution import render_trend_section
 from .ranking_charts import render_amount_ranking, render_rate_ranking
-from .flow_charts import render_cod_flow_section
+from .flow_charts import render_order_status_section
 
 
 def render_global_tab(ctx: dict) -> None:
@@ -25,9 +26,8 @@ def render_global_tab(ctx: dict) -> None:
     render_quality_badge(validation_checks)
     render_date_context(date_context)
     render_active_filters_banner(date_context)
+    render_order_status_section(global_metrics)
     render_owner_global_dashboard(df, global_metrics, thresholds, priority_actions)
-    cockpit_heading("Entonnoir et argent", "Où se perdent les commandes et le chiffre d'affaires, de la réception à la livraison.")
-    render_cod_flow_section(df, global_metrics)
     render_trend_section(df, loaded_df, date_context, global_metrics, thresholds)
 
 
@@ -54,6 +54,20 @@ def render_confirmation_tab(ctx: dict) -> None:
         max_per_row=3,
     )
 
+    cockpit_heading("Mes confirmatrices font-elles bien leur travail ?", "Chaque confirmatrice compar\u00e9e \u00e0 la moyenne de l'\u00e9quipe.")
+    confirmatrice_rates = group_card_rates(df, "Affect\u00e9e \u00e0", "confirmatrice")
+    col1, col2 = st.columns(2, gap="large")
+    with col1:
+        render_rate_ranking(
+            confirmatrice_rates, "confirmatrice", "taux_confirme", "commandes_confirmees", "commandes_recues",
+            "commandes_recues", "re\u00e7ues", volume_confirmatrice, "Taux confirm\u00e9", "", True, "rank_confirmatrice_confirme",
+        )
+    with col2:
+        render_rate_ranking(
+            confirmatrice_rates, "confirmatrice", "taux_livre", "livrees", "commandes_envoyees",
+            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_confirmatrice, "Taux livr\u00e9 de leurs commandes", "", True, "rank_confirmatrice_livre",
+        )
+
     cockpit_heading("Performance detaillee", "Clique sur une ligne pour afficher les commandes concernees.")
     confirmation_cols = ["confirmatrice", "fiabilite_volume", "commandes_recues", "commandes_annulees", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "retours", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
     event, confirmation_view = render_selectable_data_table(confirmation_display, confirmation_cols, "confirmation_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_recues")
@@ -62,11 +76,6 @@ def render_confirmation_tab(ctx: dict) -> None:
         row = confirmation_view.iloc[idx]
         show_drilldown(df, "confirmatrice", "Affectée à", row["confirmatrice"], "Commandes annulees", "confirmation")
 
-    render_rate_ranking(
-        confirmation_display, "confirmatrice", "taux_transformation_reel", "livrees", "commandes_recues",
-        "commandes_recues", "reçues", volume_confirmatrice,
-        "Classement des confirmatrices", "Sur 100 commandes reçues, combien finissent livrées", True, "rank_confirmatrice",
-    )
     with st.expander("Analyse Confirmatrice x Produit", expanded=False):
         cp_cols = ["confirmatrice", "produit", "fiabilite_volume", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_retours", "lecture_rapide"]
         render_data_table(confirmatrice_product_detail, cp_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["confirmatrice", "commandes_recues"])
@@ -99,6 +108,19 @@ def render_delivery_tab(ctx: dict) -> None:
     )
     st.info("La pr\u00e9paration est affich\u00e9e comme blocage interne avant remise au livreur ; elle reste exclue de la performance logistique individuelle.")
 
+    cockpit_heading("Mes livreurs font-ils bien leur travail ?", "Chaque livreur compar\u00e9 \u00e0 la moyenne, sur les colis qui lui ont \u00e9t\u00e9 exp\u00e9di\u00e9s.")
+    col1, col2 = st.columns(2, gap="large")
+    with col1:
+        render_rate_ranking(
+            livreurs_ui, "livreur", "taux_livraison_total", "livrees", "commandes_envoyees",
+            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_sent, "Taux livr\u00e9", "", True, "rank_livreur_livre",
+        )
+    with col2:
+        render_rate_ranking(
+            livreurs_ui, "livreur", "taux_retour", "retours", "commandes_envoyees",
+            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_sent, "Taux retour", "", False, "rank_livreur_retour",
+        )
+
     cockpit_heading("Performance detaillee", "Livraison, retours et CA par livreur.")
     livreur_cols = ["livreur", "fiabilite_volume", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_bloque_livraison", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre"]
     event, livreurs_view = render_selectable_data_table(livreurs_ui, livreur_cols, "livreur_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
@@ -115,15 +137,6 @@ def render_delivery_tab(ctx: dict) -> None:
         compare_cols = ["wilaya", "livreur_dominant", "expediees_dominant", "taux_livraison_dominant", "taux_retour_dominant", "livreur_alternatif", "expediees_alternatif", "taux_livraison_alternatif", "taux_retour_alternatif", "ecart_livraison", "ecart_retour", "fiabilite_comparaison", "lecture_rapide"]
         render_data_table(wilaya_livreur_compare, compare_cols, thresholds, "Aucune comparaison disponible avec les filtres actuels.", sort_by="wilaya")
 
-    col1, col2 = st.columns(2, gap="medium")
-    with col1:
-        render_rate_ranking(
-            livreurs_ui, "livreur", "taux_livraison_total", "livrees", "commandes_envoyees",
-            "commandes_envoyees", "expédiées", volume_sent,
-            "Taux de livraison par livreur", "Sur 100 colis expédiés, combien livrés", True, "rank_livreur",
-        )
-    with col2:
-        render_amount_ranking(livreurs_ui, "livreur", "ca_retours", "Perte CA retours par livreur", "Montant des colis revenus, par livreur", "#ef4444", "amount_livreur_retours")
     with st.expander("Voir detail complet livreurs", expanded=False):
         render_data_table(livreurs_ui, list(livreurs_ui.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
     decision_summary("Résumé décisionnel", delivery_summary(livreurs_ui, volume_sent))
@@ -184,16 +197,14 @@ def render_products_tab(ctx: dict) -> None:
         sku_cols = ["sku_produit", "produit_associe", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
         render_data_table(sku_performance, sku_cols, thresholds, "Aucune donnee SKU exploitable.", sort_by="ca_livre")
 
-    col1, col2 = st.columns(2, gap="medium")
+    col1, col2 = st.columns(2, gap="large")
     with col1:
-        render_amount_ranking(products_ui, "produit", "ca_livre", "CA livré par produit", "Montant des colis livrés, par produit", TREND_ACCENT, "amount_produit_livre")
+        render_rate_ranking(
+            products_ui, "produit", "taux_retour", "retours", "commandes_envoyees",
+            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_product, "Taux retour par produit", "", False, "rank_produit_retour",
+        )
     with col2:
-        render_amount_ranking(products_ui, "produit", "ca_retours", "Perte CA retours par produit", "Montant des colis revenus, par produit", "#ef4444", "amount_produit_retours")
-    render_rate_ranking(
-        products_ui, "produit", "taux_retour", "retours", "commandes_envoyees",
-        "commandes_envoyees", "expédiées", volume_product,
-        "Taux de retour par produit", "Sur 100 colis expédiés, combien reviennent", False, "rank_produit_retour",
-    )
+        render_amount_ranking(products_ui, "produit", "ca_livre", "CA livr\u00e9 par produit", "", TREND_ACCENT, "amount_produit_livre")
     with st.expander("Voir detail complet produits", expanded=False):
         render_data_table(products_advice, list(products_advice.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="ca_livre")
     decision_summary("Résumé décisionnel", product_summary(products_ui, volume_product))
@@ -219,12 +230,6 @@ def render_wilayas_tab(ctx: dict) -> None:
         ("En cours logistique", global_metrics.get("orders_logistics", 0), f"{pct(global_metrics.get('logistics_rate_on_sent'))} des expediees", "warn"),
         ("Livraison / expediees", pct(global_metrics["delivery_total_rate_on_sent"]), f"{global_metrics['orders_delivered']} livrees / {global_metrics['orders_sent']} expediees", tone_class(global_metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
     ])
-
-    render_rate_ranking(
-        wilayas_ui, "wilaya", "taux_livraison_total", "livrees", "commandes_envoyees",
-        "commandes_envoyees", "expédiées", volume_sent,
-        "Taux de livraison par wilaya", "Sur 100 colis expédiés, combien livrés", True, "rank_wilaya",
-    )
 
     cockpit_heading("Top CA livre", "Wilayas qui securisent le plus de CA.")
     top_wilaya_cols = ["wilaya", "commandes_recues", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "taux_retour", "ca_livre", "ca_dispatch", "produit_dominant", "livreur_dominant", "fiabilite_volume"]

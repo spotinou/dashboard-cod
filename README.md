@@ -12,8 +12,9 @@ streamlit run app.py
 ## Ce que le dashboard affiche
 
 - Vue globale : reçues, confirmées nettes, annulées, préparation, envoyées, livrées, retours, CA livré et CA bloqué.
-- Entonnoir et argent : entonnoir reçues → confirmées → expédiées → livrées avec ce qui sort à chaque étape, et cascade du CA reçu jusqu'au CA livré (perdu / en attente / livré).
-- Évolution : comparaison avec la période précédente de même durée (mêmes filtres) et courbes jour / semaine / mois des volumes, des taux clés et du CA livré cumulé.
+- Où sont mes commandes : toutes les commandes reçues réparties en livrées / en cours / perdues, avec le détail.
+- Comparaison avec la période précédente (commandes reçues, taux confirmé, taux livré, taux retour) et évolution de ces 4 indicateurs dans le temps.
+- Classements : confirmatrices (taux confirmé, taux livré), livreurs (taux livré, taux retour), produits (taux retour, CA livré).
 - Confirmation : performance par personne affectée.
 - Livraison & livreurs : KPI calculés uniquement sur les commandes réellement envoyées.
 - Produits : décisions automatiques à pousser, surveiller, corriger ou échantillon faible.
@@ -35,7 +36,7 @@ Calculs (aucun affichage) :
 - `src/metrics.py` : agrégations et KPI.
 - `src/validation.py` : contrôles de cohérence des chiffres.
 - `src/alerts.py` : alertes décisionnelles.
-- `src/flows.py` : entonnoir COD et cascade du chiffre d'affaires.
+- `src/flows.py` : répartition des commandes (livrées / en cours / perdues).
 - `src/rankings.py` : classements (livreurs, confirmatrices, produits, wilayas).
 - `src/trends.py` : évolution dans le temps et comparaison avec la période précédente.
 
@@ -46,7 +47,7 @@ Affichage (`src/views/`, un fichier par thème) :
 - `filters.py` : période d'analyse, type de date et filtres de la barre latérale.
 - `analysis.py` : analyses du dashboard (conseils produits, croisements, résumés, export Excel).
 - `overview.py` : cartes KPI de la Vue globale.
-- `evolution.py`, `ranking_charts.py`, `flow_charts.py` : graphiques d'évolution, classements, entonnoir et cascade.
+- `evolution.py`, `ranking_charts.py`, `flow_charts.py` : évolution et comparaison, classements, « Où sont mes commandes ».
 - `charts.py` : anciens graphiques en barres (conservés).
 - `components.py` : briques réutilisables (cartes, titres, tableaux).
 - `formatting.py` : formats (DA, %, dates), couleurs et préparation des tableaux.

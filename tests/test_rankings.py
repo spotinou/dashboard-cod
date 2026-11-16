@@ -132,3 +132,21 @@ def test_ranking_figures():
     amounts, _ = amount_ranking_rows(livreurs, "livreur", "ca_retours")
     fig = build_amount_ranking_figure(amounts, "livreur", "ca_retours", "#ef4444")
     assert list(fig.data[0].y) == ["ZR Express", "HHD 01"]
+
+
+def test_confirmatrice_rates_follow_the_kpi_cards():
+    from src.rankings import group_card_rates
+    from src.ui import confirmation_funnel_counts
+
+    df = build_df()
+    metrics = compute_global_metrics(df)
+    rates = group_card_rates(df, "Affectée à", "confirmatrice")
+    confirmed, card_rate, _ = confirmation_funnel_counts(metrics)
+    assert set(rates["confirmatrice"]) == {"Rayan", "Sara"}
+    assert rates["commandes_recues"].sum() == metrics["orders_received"]
+    assert rates["commandes_confirmees"].sum() == confirmed
+    # team average = the "Taux confirmé" card / the "Taux livré" card
+    assert pooled_rate(rates, "commandes_confirmees", "commandes_recues") == pytest.approx(card_rate)
+    assert pooled_rate(rates, "livrees", "commandes_envoyees") == pytest.approx(metrics["delivery_total_rate_on_sent"])
+    sara = rates.set_index("confirmatrice").loc["Sara"]
+    assert sara["taux_livre"] == 1.0 and sara["commandes_envoyees"] == 1
