@@ -121,11 +121,32 @@ def test_period_comparison_deltas_and_tones():
     # Confirmation 100 % vs 66.7 % -> +33.3 pts, good
     assert rows["confirmation_display_rate"]["delta"] == pytest.approx(1 / 3)
     assert rows["confirmation_display_rate"]["tone"] == "good"
-    # Return rate 0 % vs 50 % -> going down is good
+    # Return rate 0 % vs 50 % -> going down, but 1 of the 3 parcels (33 %) is still
+    # on the road: the delivery figures are provisional and not judged
     assert rows["return_rate_on_sent"]["direction"] == "down"
+    assert rows["return_rate_on_sent"]["provisional"] is True
+    assert rows["return_rate_on_sent"]["tone"] == "neutral"
+    assert rows["return_rate_on_sent"]["in_transit_share"] == pytest.approx(1 / 3)
+    assert rows["delivery_total_rate_on_sent"]["provisional"] is True
+    assert rows["confirmation_display_rate"]["provisional"] is False
+    assert [r["key"] for r in compute_period_comparison(current, previous)] == [
+        "orders_received", "confirmation_display_rate", "delivery_total_rate_on_sent", "return_rate_on_sent",
+    ]
+
+
+def test_period_comparison_judges_delivery_once_parcels_are_back():
+    df = build_df()
+    df = df[df["order_id"] != "F"]  # drop the parcel still on the road
+    dates = pd.to_datetime(df["Crée le"]).dt.date
+    current = compute_global_metrics(df[dates >= date(2026, 1, 3)])
+    previous = compute_global_metrics(df[dates < date(2026, 1, 3)])
+    rows = {row["key"]: row for row in compute_period_comparison(current, previous)}
+    # Taux livré 100 % vs 50 % (same definition as the "Taux livré" card)
+    assert rows["delivery_total_rate_on_sent"]["value"] == pytest.approx(current["delivery_total_rate_on_sent"])
+    assert rows["delivery_total_rate_on_sent"]["delta"] == pytest.approx(0.5)
+    assert rows["delivery_total_rate_on_sent"]["provisional"] is False
+    assert rows["delivery_total_rate_on_sent"]["tone"] == "good"
     assert rows["return_rate_on_sent"]["tone"] == "good"
-    # CA livré 9000 vs 3000 -> +200 %
-    assert rows["ca_delivered"]["delta"] == pytest.approx(2.0)
 
 
 def test_period_comparison_without_previous_data():
@@ -226,3 +247,12 @@ def test_previous_period_partially_before_file_is_not_compared():
     context["start_date"] = date(2026, 1, 2)
     prev_df, window = previous_period_frame(df, context)
     assert prev_df is None and window == (date(2025, 12, 30), date(2026, 1, 1))
+
+
+def test_trend_taux_livre_matches_the_card():
+    df = build_df()
+    trend = compute_trend(df, "Crée le", "Jour")
+    metrics = compute_global_metrics(df)
+    assert [spec[0] for spec in TREND_CHARTS] == ["commandes_recues", "taux_confirmation", "taux_livraison_total", "taux_retour"]
+    assert trend_average(trend, "taux_livraison_total") == pytest.approx(metrics["delivery_total_rate_on_sent"])
+    assert trend_average(trend, "taux_retour") == pytest.approx(metrics["return_rate_on_sent"])

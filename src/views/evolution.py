@@ -6,16 +6,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ..metrics import compute_global_metrics
-from ..trends import GRANULARITY_FREQ, TREND_CHARTS, auto_granularity, compute_period_comparison, compute_trend, previous_period, provisional_mask, trend_reading
+from ..trends import TREND_CHARTS, auto_granularity, compute_period_comparison, compute_trend, previous_period, provisional_mask, trend_reading
 from .formatting import DASH, TREND_ACCENT, TREND_ACCENT_LIGHT, TREND_AVERAGE_COLOR, TREND_GRID_COLOR, TREND_TONE_COLORS, format_date, html_text, money, pct
-from .components import cockpit_heading, render_data_table, render_section_kpis
+from .components import cockpit_heading, render_section_kpis
 from .filters import DATE_TYPE_OPTIONS, apply_date_filter, apply_filter_values, date_series, detect_date_columns, get_date_column
-
-
-TREND_GRANULARITY_KEY = "trend_granularity"
-
-
-TREND_PERIOD_KEY = "trend_granularity_period"
 
 
 TREND_TICK_FORMAT = {"Jour": "%d/%m", "Semaine": "%d/%m", "Mois": "%m/%Y"}
@@ -75,9 +69,11 @@ def comparison_cards(rows: list[dict], window: tuple | None) -> list[tuple[str, 
     for row in rows:
         value = format_metric_value(row["value"], row["kind"])
         if row["delta"] is None:
-            note = "Pas de données sur la période précédente"
+            note = "Pas de données avant"
         else:
-            note = f"{format_delta(row)}\nAvant : {format_metric_value(row['previous'], row['kind'])}"
+            note = f"{format_delta(row)} (avant : {format_metric_value(row['previous'], row['kind'])})"
+            if row.get("provisional"):
+                note += f"\n\u23f3 Provisoire : {pct(row.get('in_transit_share'))} des colis encore en route"
         cards.append((row["label"], value, note, row["tone"]))
     return cards
 
@@ -93,30 +89,27 @@ def format_period_label(value, granularity: str) -> str:
     return ts.strftime("%d/%m/%Y")
 
 
-def trend_reading_text(reading: dict, kind: str, granularity: str) -> tuple[str, str, str]:
-    """(pill label, pill tone, sentence) explaining the chart in one line."""
-    average = format_metric_value(reading.get("average"), kind)
-    if reading.get("last_period") is None:
-        return "À confirmer", "neutral", "Pas encore assez de périodes complètes pour juger."
-    last = f"{html_text(format_metric_value(reading.get('last_value'), kind))} ({html_text(format_period_label(reading['last_period'], granularity))})"
-    average = html_text(average)
-    label = {"up": "▲ En hausse", "down": "▼ En baisse", "flat": "= Stable"}.get(reading.get("direction"), "—")
-    return label, reading.get("tone", "neutral"), f"Dernière période complète : <b>{last}</b><br>Moyenne (ligne grise) : <b>{average}</b>"
-
-
-def render_trend_card_header(title: str, explanation: str, higher_is_better: bool, reading: dict, kind: str, granularity: str) -> None:
-    pill, tone, sentence = trend_reading_text(reading, kind, granularity)
-    bg, fg = TREND_TONE_COLORS.get(tone, TREND_TONE_COLORS["neutral"])
+def trend_reading_text(reading: dict, kind: str, higher_is_better: bool) -> tuple[str, str, str]:
+    """(pill label, pill tone, one short line) for a chart header."""
     better = "plus haut = mieux" if higher_is_better else "plus bas = mieux"
+    if reading.get("last_period") is None:
+        return "\u00c0 confirmer", "neutral", f"Pas encore assez de semaines termin\u00e9es \u00b7 {better}"
+    label = {"up": "\u25b2 En hausse", "down": "\u25bc En baisse", "flat": "= Stable"}.get(reading.get("direction"), "\u2014")
+    average = html_text(format_metric_value(reading.get("average"), kind))
+    return label, reading.get("tone", "neutral"), f"Moyenne : <b>{average}</b> \u00b7 {better}"
+
+
+def render_trend_card_header(title: str, higher_is_better: bool, reading: dict, kind: str) -> None:
+    pill, tone, sentence = trend_reading_text(reading, kind, higher_is_better)
+    bg, fg = TREND_TONE_COLORS.get(tone, TREND_TONE_COLORS["neutral"])
     st.markdown(
         f"""
-        <div style="margin:6px 0 0;min-height:92px">
+        <div style="margin:6px 0 0">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
             <span style="font-size:15px;font-weight:850;color:#0f172a">{html_text(title)}</span>
             <span style="background:{bg};color:{fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{html_text(pill)}</span>
           </div>
-          <div style="font-size:11.5px;color:#64748b;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="{html_text(explanation)}">{html_text(explanation)} · <b>{html_text(better)}</b></div>
-          <div style="font-size:12.5px;color:#334155;margin-top:4px;line-height:1.45">{sentence}</div>
+          <div style="font-size:12.5px;color:#475569;margin-top:2px">{sentence}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -195,7 +188,7 @@ def build_metric_trend_figure(trend: pd.DataFrame, key: str, kind: str, form: st
 def render_metric_trend(trend: pd.DataFrame, spec: tuple, granularity: str) -> None:
     key, title, explanation, kind, higher_is_better, form, depends_on_delivery = spec
     reading = trend_reading(trend, key, kind, higher_is_better, depends_on_delivery)
-    render_trend_card_header(title, explanation, higher_is_better, reading, kind, granularity)
+    render_trend_card_header(title, higher_is_better, reading, kind)
     fig = build_metric_trend_figure(trend, key, kind, form, depends_on_delivery, granularity, reading.get("average"))
     if fig is None:
         st.info("Pas assez de données pour ce graphique.")
@@ -210,7 +203,7 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
         window_text = f" ({format_date(window[0])} → {format_date(window[1])})" if window else ""
         cockpit_heading(
             "Comparaison avec la période précédente",
-            f"Même durée juste avant{window_text}, mêmes filtres. Vert = mieux qu'avant, rouge = moins bien.",
+            f"M\u00eame dur\u00e9e juste avant{window_text}. Vert = mieux qu'avant, rouge = moins bien.",
         )
         if window is None:
             st.caption("Comparaison indisponible : aucune période d'analyse définie.")
@@ -225,33 +218,22 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
                 st.caption("Aucune commande sur la période précédente.")
         else:
             rows = compute_period_comparison(global_metrics, compute_global_metrics(prev_df))
-            render_section_kpis(comparison_cards(rows, window), max_per_row=6)
-            st.caption("Sur une période récente, des colis sont encore en route : le CA livré et la transformation brute peuvent encore monter.")
+            render_section_kpis(comparison_cards(rows, window), max_per_row=4)
 
+        granularity = auto_granularity(date_context.get("start_date"), date_context.get("end_date"))
+        unit = {"Jour": "jour", "Semaine": "semaine", "Mois": "mois"}[granularity]
         cockpit_heading(
-            "Évolution dans le temps",
-            "Un graphique par indicateur. Barres et points clairs = période pas encore définitive (incomplète ou colis encore en route). Ligne grise = moyenne.",
+            "\u00c9volution de mes taux",
+            f"Un point par {unit}. Ligne grise = moyenne. En clair = {unit} pas encore termin\u00e9 ou colis encore en route (pas d\u00e9finitif).",
         )
-        options = list(GRANULARITY_FREQ)
-        default = auto_granularity(date_context.get("start_date"), date_context.get("end_date"))
-        period_signature = (date_context.get("start_date"), date_context.get("end_date"))
-        if st.session_state.get(TREND_GRANULARITY_KEY) not in options or st.session_state.get(TREND_PERIOD_KEY) != period_signature:
-            st.session_state[TREND_GRANULARITY_KEY] = default
-            st.session_state[TREND_PERIOD_KEY] = period_signature
-        granularity = st.radio("Regrouper par", options, horizontal=True, key=TREND_GRANULARITY_KEY)
         trend = compute_trend(df, date_context.get("date_column"), granularity, date_context.get("start_date"), date_context.get("end_date"))
         if len(trend) < 2:
-            st.info("Pas assez de périodes pour tracer une évolution : choisis une période plus longue ou un regroupement plus fin.")
+            st.info("Pas assez de donn\u00e9es pour tracer une \u00e9volution : choisis une p\u00e9riode plus longue.")
             return
-        for start in range(0, len(TREND_CHARTS), 3):
-            cols = st.columns(3, gap="medium")
-            for col, spec in zip(cols, TREND_CHARTS[start:start + 3]):
+        for start in range(0, len(TREND_CHARTS), 2):
+            cols = st.columns(2, gap="large")
+            for col, spec in zip(cols, TREND_CHARTS[start:start + 2]):
                 with col:
                     render_metric_trend(trend, spec, granularity)
-        with st.expander("Voir le tableau d'évolution", expanded=False):
-            table = trend.drop(columns=["ca_livre_cumule", "periode_fin", "periode_incomplete", "part_en_route"]).copy()
-            table["periode"] = table["periode"].map(lambda value: format_period_label(value, granularity))
-            table = table.rename(columns={"periode": "Période", "commandes_confirmees": "Confirmées", "colis_en_route": "Colis encore en route"})
-            render_data_table(table, list(table.columns), thresholds, "Aucune donnée.")
     except Exception as exc:  # never let the new section break the existing dashboard
         st.warning(f"Section évolution indisponible pour ce fichier : {exc}")

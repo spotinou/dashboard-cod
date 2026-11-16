@@ -205,17 +205,19 @@ def render_selectable_data_table(df: pd.DataFrame, columns: list[str], key: str,
     return event, view
 
 
-def render_chart_header(title: str, explanation: str, pill: str, sentence_html: str, min_height: int = 92) -> None:
+def render_chart_header(title: str, explanation: str, pill: str, sentence_html: str = "", min_height: int = 0) -> None:
+    """Chart title with a grey badge on the right and one short line under it."""
     bg, fg = TREND_TONE_COLORS["neutral"]
+    sentence = f'<div style="font-size:12.5px;color:#334155;margin-top:4px;line-height:1.45">{sentence_html}</div>' if sentence_html else ""
     st.markdown(
         f"""
-        <div style="margin:6px 0 0;min-height:{min_height}px">
+        <div style="margin:6px 0 4px;min-height:{min_height}px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
             <span style="font-size:15px;font-weight:850;color:#0f172a">{html_text(title)}</span>
             <span style="background:{bg};color:{fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{html_text(pill)}</span>
           </div>
-          <div style="font-size:11.5px;color:#64748b;margin-top:1px">{explanation}</div>
-          <div style="font-size:12.5px;color:#334155;margin-top:4px;line-height:1.45">{sentence_html}</div>
+          <div style="font-size:12.5px;color:#475569;margin-top:2px">{explanation}</div>
+          {sentence}
         </div>
         """,
         unsafe_allow_html=True,

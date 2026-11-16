@@ -24,7 +24,7 @@ from .metrics import (
     compute_product_wilaya_alerts,
     compute_wilaya_metrics,
 )
-from .flows import funnel_stages, revenue_waterfall, waterfall_summary
+from .flows import funnel_stages, order_status_split
 from .rankings import (
     OTHERS_LABEL,
     amount_concentration,
@@ -33,6 +33,7 @@ from .rankings import (
     rate_ranking_reading,
     rate_ranking_rows,
     rate_tone,
+    group_card_rates,
 )
 from .trends import (
     GRANULARITY_FREQ,
@@ -195,8 +196,6 @@ from .views.charts import (  # noqa: F401
     percent_bar,
 )
 from .views.evolution import (  # noqa: F401
-    TREND_GRANULARITY_KEY,
-    TREND_PERIOD_KEY,
     TREND_TICK_FORMAT,
     _hover_values,
     build_metric_trend_figure,
@@ -223,16 +222,14 @@ from .views.ranking_charts import (  # noqa: F401
     short_label,
 )
 from .views.flow_charts import (  # noqa: F401
-    FLOW_COLORS,
-    FLOW_TONE_TEXT,
-    build_revenue_waterfall_figure,
-    funnel_html,
-    render_cod_flow_section,
+    ORDER_GROUPS,
+    order_status_cards_html,
+    render_order_status_section,
 )
 from .views.app import (  # noqa: F401
+    compute_dashboard_data,
     run_app,
 )
-from .views.app import compute_dashboard_data  # noqa: F401
 from .views.styles import DASHBOARD_CSS  # noqa: F401
 from .views.tabs import (  # noqa: F401
     render_confirmation_tab,

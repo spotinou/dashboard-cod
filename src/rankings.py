@@ -8,6 +8,8 @@ from __future__ import annotations
 import pandas as pd
 
 from .cleaning import safe_divide
+from .metrics import compute_global_metrics
+from .trends import exclusive_confirmed
 
 # Same "unknown" values as ui.is_known_value, plus a few harmless extras.
 UNKNOWN_LABELS = {"", "non renseigné", "non renseign\u00c3\u00a9", "non renseigne", "nan", "none", "-", "—"}
@@ -120,3 +122,31 @@ def amount_concentration(rows: pd.DataFrame, label_col: str, value_col: str, tot
         return None
     named = rows[rows[label_col] != OTHERS_LABEL]
     return safe_divide(float(named[value_col].head(top_n).sum()), float(total))
+
+
+def group_card_rates(df: pd.DataFrame, group_col: str, label_col: str) -> pd.DataFrame:
+    """Per person (or group), the same rates as the KPI cards, computed with the same function.
+
+    ``taux_confirme`` excludes orders still being confirmed, exactly like the
+    "Taux confirmé" card; ``taux_livre`` and ``taux_retour`` are on shipped parcels."""
+    columns = [label_col, "commandes_recues", "commandes_confirmees", "taux_confirme", "commandes_envoyees", "livrees", "retours", "taux_livre", "taux_retour"]
+    if df.empty or group_col not in df.columns:
+        return pd.DataFrame(columns=columns)
+    rows = []
+    for label, part in df.groupby(group_col, dropna=False, sort=True):
+        m = compute_global_metrics(part)
+        confirmed = exclusive_confirmed(m)
+        rows.append(
+            {
+                label_col: label,
+                "commandes_recues": m["orders_received"],
+                "commandes_confirmees": confirmed,
+                "taux_confirme": safe_divide(float(confirmed), float(m["orders_received"])),
+                "commandes_envoyees": m["orders_sent"],
+                "livrees": m["orders_delivered"],
+                "retours": m["orders_returned_failed"],
+                "taux_livre": m["delivery_total_rate_on_sent"],
+                "taux_retour": m["return_rate_on_sent"],
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)

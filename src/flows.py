@@ -1,7 +1,7 @@
-"""COD funnel and revenue waterfall built from the existing global metrics.
+"""COD funnel and "where are my orders" split, built from the existing global metrics.
 
 Nothing here classifies orders again: every figure comes from
-``compute_global_metrics`` / ``amount_totals``. When a breakdown does not
+``compute_global_metrics``. When a breakdown does not
 add up exactly to the gap between two steps (e.g. odd multi-row orders),
 the difference is shown as its own "Autres" line instead of being hidden.
 """
@@ -10,16 +10,8 @@ from __future__ import annotations
 from .cleaning import safe_divide
 from .trends import exclusive_confirmed
 
-# Waterfall tones: lost for good, still pending (can still turn into cash), secured.
-LOST, PENDING, SECURED, BASE = "lost", "pending", "secured", "base"
-
-
 def _int(metrics: dict, key: str) -> int:
     return int(metrics.get(key, 0) or 0)
-
-
-def _float(values: dict, key: str) -> float:
-    return float(values.get(key, 0) or 0)
 
 
 def _breakdown(gap: float, items: list[tuple[str, float]], others_label: str, tolerance: float = 0.0) -> list[tuple[str, float]]:
@@ -74,41 +66,39 @@ def funnel_stages(metrics: dict) -> list[dict]:
     return stages
 
 
-def revenue_waterfall(metrics: dict, amounts: dict) -> list[dict]:
-    """From the revenue of all orders received down to the delivered revenue.
+def order_status_split(metrics: dict) -> dict:
+    """Where every order received is now: delivered, still in progress, or lost.
 
-    Steps: total, then each deduction (cancelled, in confirmation, preparation,
-    in delivery, returns, unexplained remainder if any), then delivered revenue.
-    The steps always close exactly on ``ca_delivered``."""
-    total = _float(amounts, "ca_total_orders")
-    delivered = _float(metrics, "ca_delivered")
-    cancelled = max(total - _float(amounts, "ca_confirmed"), 0.0)
-    deductions = [
-        ("Annulées", cancelled, LOST),
-        ("Encore en confirmation", _float(metrics, "ca_in_confirmation"), PENDING),
-        ("En préparation", _float(metrics, "ca_preparation"), PENDING),
-        ("En cours de livraison", _float(metrics, "ca_logistics"), PENDING),
-        ("Retours / échecs", _float(metrics, "ca_returned_failed"), LOST),
-    ]
-    remainder = total - delivered - sum(value for _, value, _ in deductions)
-    if abs(remainder) >= 1:  # below 1 DA: rounding only
-        deductions.append(("Autres / non classées", remainder, PENDING))
-    steps = [{"label": "CA des commandes reçues", "value": total, "start": 0.0, "end": total, "tone": BASE, "share": safe_divide(total, total)}]
-    level = total
-    for label, value, tone in deductions:
-        if not value:
-            continue
-        steps.append({"label": label, "value": -value, "start": level - value, "end": level, "tone": tone, "share": safe_divide(value, total)})
-        level -= value
-    steps.append({"label": "CA livré", "value": delivered, "start": 0.0, "end": delivered, "tone": SECURED, "share": safe_divide(delivered, total)})
-    return steps
+    Built from the funnel gaps, so the three groups always add up to the
+    orders received. Labels are the ones of the "Parcours COD" cards."""
+    stages = funnel_stages(metrics)
+    received = stages[0]["value"]
+    lost, in_progress = [], []
+    lost_labels = {"annulées": "annulées", "retours / échecs": "retours"}
+    progress_labels = {
+        "encore en confirmation": "en confirmation",
+        "en préparation (pas encore expédiées)": "en préparation",
+        "encore en livraison": "en livraison",
+    }
+    others = 0
+    for stage in stages[:-1]:
+        for name, count in stage["loss_breakdown"]:
+            if name in lost_labels:
+                lost.append((lost_labels[name], count))
+            elif name in progress_labels:
+                in_progress.append((progress_labels[name], count))
+            else:  # "non classées" / "autres": not delivered, not lost for sure
+                others += count
+    if others:
+        in_progress.append(("autres", others))
+    delivered = stages[-1]["value"]
 
+    def group(items, total):
+        return {"count": total, "share": safe_divide(float(total), float(received)), "detail": items}
 
-def waterfall_summary(steps: list[dict]) -> dict:
-    """Totals per tone, as shares of the revenue received."""
-    total = steps[0]["value"] if steps else 0.0
-    summary = {}
-    for tone in (LOST, PENDING, SECURED):
-        amount = sum(abs(step["value"]) for step in steps[1:] if step["tone"] == tone)
-        summary[tone] = (amount, safe_divide(amount, total) if total else None)
-    return summary
+    return {
+        "received": received,
+        "delivered": group([], delivered),
+        "in_progress": group(in_progress, sum(c for _, c in in_progress)),
+        "lost": group(lost, sum(c for _, c in lost)),
+    }
