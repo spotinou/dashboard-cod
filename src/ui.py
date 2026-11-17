@@ -50,6 +50,7 @@ from .validation import compute_validation_checks
 from .views.formatting import (  # noqa: F401
     DASH,
     DISPLAY_COLUMNS,
+    GLOSSARY,
     SENSITIVE_COLUMNS,
     TEXT_LIKE_COLUMNS,
     TREND_ACCENT,
@@ -64,6 +65,7 @@ from .views.formatting import (  # noqa: F401
     format_count,
     format_date,
     format_table,
+    help_icon,
     html_text,
     is_known_value,
     is_money_column,

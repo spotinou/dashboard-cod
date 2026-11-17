@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 from io import BytesIO
 
+from ..trends import net_transformation_rate
 from .formatting import DASH, SENSITIVE_COLUMNS, format_table, is_known_value, money, no_reliable_message, pct, reliable_rows, safe_ratio, sort_for_display
 
 
@@ -27,7 +28,8 @@ def global_metrics_table(metrics: dict) -> pd.DataFrame:
         ("Taux livraison finalisée hors en cours", pct(metrics["delivery_finalized_rate"])),
         ("Taux livraison sur exp\u00e9di\u00e9es", pct(metrics["delivery_total_rate_on_sent"])),
         ("Taux retour", pct(metrics["return_rate_on_sent"])),
-        ("Taux transformation réel", pct(metrics["transformation_real_rate"])),
+        ("Taux transformation brute", pct(metrics["transformation_real_rate"])),
+        ("Taux transformation nette", pct(net_transformation_rate(metrics))),
         ("CA livré finalisé", money(metrics["ca_delivered"])),
         ("CA en dispatch", money(metrics.get("ca_dispatch", 0))),
         ("CA en cours livraison", money(metrics["ca_in_delivery"])),

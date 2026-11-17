@@ -58,12 +58,12 @@ def test_verdict_levels():
 def test_health_summary_and_text():
     signs = vital_signs(compute_global_metrics(build_df()), DEFAULT_THRESHOLDS)
     summary = health_summary(signs)
-    assert sum(summary["counts"].values()) == 5
+    assert sum(summary["counts"].values()) == 7
     assert summary["overall"] in {GOOD, WARN, BAD}
     text = overall_text(summary)
     for sign in summary["to_watch"]:
         assert sign["label"] in text
-    good = health_summary([{"verdict": GOOD, "label": "x"}] * 5)
+    good = health_summary([{"verdict": GOOD, "label": "x"}] * 7)
     assert overall_text(good).startswith("🟢 Tout va bien")
 
 
@@ -154,3 +154,23 @@ def test_confirmation_is_stuck_after_three_days():
     assert steps["confirmation"]["late"] == 0
     steps = {s["key"]: s for s in stuck_orders(df, pd.Timestamp("2026-01-05"))}
     assert steps["confirmation"]["late"] == 1
+
+
+def test_transformation_rates():
+    from src.trends import net_transformation_rate
+    from src.rankings import group_card_rates, pooled_rate
+
+    df = build_df()
+    metrics = compute_global_metrics(df)
+    # 8 received, 1 cancelled (G), 1 delivered (F)
+    assert metrics["orders_received"] == 8 and metrics["orders_cancelled"] == 1 and metrics["orders_delivered"] == 1
+    assert metrics["transformation_real_rate"] == pytest.approx(1 / 8)  # brute: delivered / received
+    assert net_transformation_rate(metrics) == pytest.approx(1 / 7)  # nette: delivered / (received - cancelled)
+    signs = {s["key"]: s for s in vital_signs(metrics, DEFAULT_THRESHOLDS)}
+    assert signs["transformation"]["value"] == pytest.approx(1 / 8)
+    assert signs["transformation"]["objective"] == 0.40
+    assert signs["net_transformation"]["value"] == pytest.approx(1 / 7)
+    assert signs["net_transformation"]["objective"] == 0.50
+    rates = group_card_rates(df, "Affectée à", "confirmatrice")
+    assert pooled_rate(rates, "livrees", "commandes_recues") == pytest.approx(metrics["transformation_real_rate"])
+    assert pooled_rate(rates, "livrees", "commandes_confirmees_nettes") == pytest.approx(net_transformation_rate(metrics))

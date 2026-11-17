@@ -28,6 +28,8 @@ TREND_COLUMNS = [
     "taux_livraison_total",
     "taux_retour",
     "taux_transformation_reel",
+    "commandes_confirmees_nettes",
+    "taux_transformation_nette",
     "ca_livre",
     "ca_livre_cumule",
     "periode_fin",
@@ -105,6 +107,8 @@ def compute_trend(df: pd.DataFrame, date_col: str | None, granularity: str = "Jo
                 "taux_livraison_total": m["delivery_total_rate_on_sent"],
                 "taux_retour": m["return_rate_on_sent"],
                 "taux_transformation_reel": m["transformation_real_rate"],
+                "commandes_confirmees_nettes": m["orders_confirmed_net"],
+                "taux_transformation_nette": net_transformation_rate(m),
                 "ca_livre": m["ca_delivered"],
                 "periode_fin": period_end(pd.Timestamp(period), granularity),
                 "colis_en_route": max(int(m["orders_sent"]) - int(m["orders_delivered"]) - int(m["orders_returned_failed"]), 0),
@@ -147,9 +151,11 @@ COMPARISON_METRICS = [
     ("confirmation_display_rate", "Taux confirmé", "rate", True),
     ("delivery_total_rate_on_sent", "Taux livré (sur expédiées)", "rate", True),
     ("delivery_finalized_rate", "Taux livré (sur colis terminés)", "rate", True),
+    ("transformation_real_rate", "Taux de transformation brute", "rate", True),
+    ("net_transformation_rate", "Taux de transformation nette", "rate", True),
 ]
 # Indicators that keep moving while parcels are still on the road.
-DELIVERY_DEPENDENT = {"delivery_total_rate_on_sent", "delivery_finalized_rate", "return_rate_on_sent"}
+DELIVERY_DEPENDENT = {"delivery_total_rate_on_sent", "delivery_finalized_rate", "return_rate_on_sent", "transformation_real_rate", "net_transformation_rate"}
 
 
 def in_transit_share(metrics: dict) -> float | None:
@@ -157,6 +163,11 @@ def in_transit_share(metrics: dict) -> float | None:
     sent = int(metrics.get("orders_sent", 0) or 0)
     done = int(metrics.get("orders_delivered", 0) or 0) + int(metrics.get("orders_returned_failed", 0) or 0)
     return safe_divide(float(max(sent - done, 0)), float(sent))
+
+
+def net_transformation_rate(metrics: dict) -> float | None:
+    """Taux de transformation nette: delivered / (received - cancelled) = delivered / net confirmed."""
+    return safe_divide(float(metrics.get("orders_delivered", 0) or 0), float(metrics.get("orders_confirmed_net", 0) or 0))
 
 
 def card_confirmation_rate(metrics: dict) -> float | None:
@@ -175,6 +186,7 @@ def card_confirmation_rate(metrics: dict) -> float | None:
 def comparison_values(metrics: dict) -> dict:
     values = dict(metrics)
     values["confirmation_display_rate"] = card_confirmation_rate(metrics)
+    values["net_transformation_rate"] = net_transformation_rate(metrics)
     return values
 
 
@@ -237,6 +249,8 @@ TREND_CHARTS = [
     ("taux_confirmation", "Taux confirmé", "", "rate", True, "line", False),
     ("taux_livraison_total", "Taux livré (sur expédiées)", "", "rate", True, "line", True),
     ("taux_livraison_finalisees", "Taux livré (sur colis terminés)", "", "rate", True, "line", True),
+    ("taux_transformation_reel", "Taux de transformation brute", "", "rate", True, "line", True),
+    ("taux_transformation_nette", "Taux de transformation nette", "", "rate", True, "line", True),
     ("commandes_recues", "Commandes reçues", "", "count", True, "bar", False),
 ]
 
@@ -248,6 +262,7 @@ RATE_PARTS = {
     "taux_livraison_total": ("livrees", ["commandes_envoyees"]),
     "taux_retour": ("retours", ["commandes_envoyees"]),
     "taux_transformation_reel": ("livrees", ["commandes_recues"]),
+    "taux_transformation_nette": ("livrees", ["commandes_confirmees_nettes"]),
 }
 
 # Below these changes vs the average, the last period is read as "stable".

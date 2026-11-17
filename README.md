@@ -5,7 +5,12 @@ Application Streamlit locale pour analyser un export Excel CRM/ERP de commandes 
 ## Réglages par défaut
 
 - Période affichée à l'ouverture d'un fichier : 30 derniers jours.
-- Objectifs : confirmé ≥ 70 %, livré ≥ 70 %, retour ≤ 25 %, annulé ≤ 15 % (modifiables dans la barre latérale).
+- Objectifs : confirmé ≥ 70 %, livré ≥ 70 %, transformation brute ≥ 40 %, transformation nette ≥ 50 %, retour ≤ 25 %, annulé ≤ 15 % (modifiables dans la barre latérale).
+
+## Définitions
+
+- Taux de transformation brute = livrées ÷ reçues (sur 100 commandes reçues, combien sont livrées).
+- Taux de transformation nette = livrées ÷ (reçues − annulées) : même chose sans les annulées (faux numéros, doublons, refus).
 
 ## Lancer
 

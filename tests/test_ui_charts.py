@@ -230,9 +230,9 @@ def test_priority_actions_have_required_advice_columns():
 def test_business_delivery_labels_are_unambiguous():
     rendered = prepare_dataframe_for_display(pd.DataFrame({"taux_livraison_total": [0.4167], "taux_transformation_reel": [0.2353]}), rename_columns=True)
     assert "Taux livraison sur exp\u00e9di\u00e9es" in rendered.columns
-    assert "Taux transformation r\u00e9el" in rendered.columns
+    assert "Taux transformation brute" in rendered.columns
     assert rendered["Taux livraison sur exp\u00e9di\u00e9es"].iloc[0] == "41.7 %"
-    assert rendered["Taux transformation r\u00e9el"].iloc[0] == "23.5 %"
+    assert rendered["Taux transformation brute"].iloc[0] == "23.5 %"
 
 
 def test_global_metrics_table_uses_distinct_delivery_and_transformation_labels():
@@ -261,7 +261,7 @@ def test_global_metrics_table_uses_distinct_delivery_and_transformation_labels()
     table = global_metrics_table(metrics)
     values = dict(zip(table["Indicateur"], table["Valeur"]))
     assert values["Taux livraison sur exp\u00e9di\u00e9es"] == "41.7 %"
-    assert values["Taux transformation r\u00e9el"] == "23.5 %"
+    assert values["Taux transformation brute"] == "23.5 %"
 
 
 def test_source_and_sku_performance_include_real_transformation_rate():
@@ -705,6 +705,7 @@ def test_owner_kpi_sections_follow_cod_funnel_and_show_denominators():
         "Taux en cours de livraison",
         "Taux livr\u00e9",
         "Taux de transformation brute",
+        "Taux de transformation nette",
         "Taux annul\u00e9",
     ]
 
@@ -716,6 +717,8 @@ def test_owner_kpi_sections_follow_cod_funnel_and_show_denominators():
     assert cards["Taux en cours de livraison"] == ("11.1 %", "50 commandes en livraison\nBase : 450 exp\u00e9di\u00e9es")
     assert cards["Taux livr\u00e9"] == ("66.7 %", "300 commandes livr\u00e9es\nBase : 450 exp\u00e9di\u00e9es")
     assert cards["Taux de transformation brute"] == ("42.9 %", "300 livr\u00e9es / 700 re\u00e7ues")
+    # nette: 300 delivered / (700 received - 120 cancelled = 580)
+    assert cards["Taux de transformation nette"] == ("51.7 %", "300 livr\u00e9es / 580 re\u00e7ues hors annul\u00e9es")
     assert cards["Taux annul\u00e9"] == ("17.1 %", "120 commandes annul\u00e9es\nBase : 700 re\u00e7ues")
     assert sum(float(cards[title][0].replace(" %", "")) for title in ("Taux confirm\u00e9", "Taux en cours de confirmation", "Taux annul\u00e9")) == 100.0
 

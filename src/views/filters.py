@@ -434,9 +434,14 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
         "delivery_orange": st.sidebar.slider("Livraison orange >= ", 0.0, 1.0, DEFAULT_THRESHOLDS["delivery_orange"], 0.01),
         "return_orange": st.sidebar.slider("Retour orange > ", 0.0, 1.0, DEFAULT_THRESHOLDS["return_orange"], 0.01),
         "return_red": st.sidebar.slider("Retour rouge > ", 0.0, 1.0, DEFAULT_THRESHOLDS["return_red"], 0.01),
+        "transformation_green": st.sidebar.slider("Transformation brute objectif >= ", 0.0, 1.0, DEFAULT_THRESHOLDS["transformation_green"], 0.01),
+        "net_transformation_green": st.sidebar.slider("Transformation nette objectif >= ", 0.0, 1.0, DEFAULT_THRESHOLDS["net_transformation_green"], 0.01),
         "preparation_orange": st.sidebar.slider("Preparation orange > ", 0.0, 1.0, DEFAULT_THRESHOLDS["preparation_orange"], 0.01),
         "preparation_red": st.sidebar.slider("Preparation rouge > ", 0.0, 1.0, DEFAULT_THRESHOLDS["preparation_red"], 0.01),
     }
+    # Alert level for the transformation rates: 5 points under the objective.
+    thresholds["transformation_orange"] = max(thresholds["transformation_green"] - 0.05, 0.0)
+    thresholds["net_transformation_orange"] = max(thresholds["net_transformation_green"] - 0.05, 0.0)
     date_context["kept_rows_after_filters"] = len(df)
     date_context["active_secondary_filters"] = active_filters
     date_context["applied_filter_values"] = applied_filter_values

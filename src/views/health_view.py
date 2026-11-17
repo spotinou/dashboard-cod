@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from ..health import BAD, GOOD, WARN, average_delivery_days, health_summary, reference_date, stuck_orders, vital_signs
-from .formatting import format_count, format_date, html_text, pct
+from .formatting import format_count, format_date, help_icon, html_text, pct
 
 VERDICT_STYLE = {
     GOOD: ("\U0001f7e2 Bon", "#16a34a", "#dcfce7", "#166534"),
@@ -39,7 +39,7 @@ def vital_sign_html(sign: dict) -> str:
     return (
         f'<div style="{CARD_STYLE}">'
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
-        f'<span style="font-size:14px;font-weight:800;color:#0f172a">{html_text(sign["label"])}</span>'
+        f'<span style="font-size:14px;font-weight:800;color:#0f172a">{html_text(sign["label"])}{help_icon(sign["label"])}</span>'
         f'<span style="background:{pill_bg};color:{pill_fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{label}</span></div>'
         f'<div style="font-size:28px;font-weight:850;color:#0f172a;margin-top:4px;line-height:1.1">{html_text(pct(value))}</div>'
         f'<div style="font-size:12.5px;color:#475569;margin-top:2px">{html_text(sentence)}</div>'
@@ -84,8 +84,8 @@ def render_health_section(metrics: dict, thresholds: dict[str, float], df: pd.Da
         st.warning(f"Section santé indisponible pour ce fichier : {exc}")
 
 
-# Three cards per row on a computer screen.
-CARD_STYLE = "flex:1 1 30%;min-width:240px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;padding:12px 14px"
+# Four cards per row on a computer screen.
+CARD_STYLE = "flex:1 1 22%;min-width:220px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;padding:12px 14px"
 
 STEP_ICONS = {"confirmation": "\U0001f4de", "preparation": "\U0001f4e6", "delivery": "\U0001f69a"}
 

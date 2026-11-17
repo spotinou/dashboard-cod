@@ -14,6 +14,10 @@ DEFAULT_THRESHOLDS = {
     "delivery_orange": 0.60,
     "return_orange": 0.25,
     "return_red": 0.35,
+    "transformation_green": 0.40,  # brute: delivered / received
+    "transformation_orange": 0.35,
+    "net_transformation_green": 0.50,  # nette: delivered / (received - cancelled)
+    "net_transformation_orange": 0.45,
     "preparation_orange": 0.05,
     "preparation_red": 0.15,
     "volume_product": 10,
