@@ -472,11 +472,13 @@ def test_analysis_period_selector_initializes_active_value_and_form_draft_for_fi
 
     period, message = initialize_analysis_period_selector(state, ("export.xlsx", 123), min_date, max_date)
 
-    assert period == (min_date, max_date)
+    # Default period: the last 30 days of the file
+    last_30 = period_from_preset("30 derniers jours", min_date, max_date)
+    assert period == last_30
     assert message is None
-    assert state[ANALYSIS_PERIOD_VALUE_KEY] == (min_date, max_date)
-    assert state[ANALYSIS_PERIOD_DRAFT_KEY] == (min_date, max_date)
-    assert state[ANALYSIS_PERIOD_PRESET_KEY] == "Toute la p\u00e9riode"
+    assert state[ANALYSIS_PERIOD_VALUE_KEY] == last_30
+    assert state[ANALYSIS_PERIOD_DRAFT_KEY] == last_30
+    assert state[ANALYSIS_PERIOD_PRESET_KEY] == "30 derniers jours"
     assert state[ANALYSIS_PERIOD_FILE_KEY] == ("export.xlsx", 123)
 
 
@@ -548,8 +550,8 @@ def test_analysis_period_selector_survives_rerun_and_resets_only_for_a_new_file(
     new_file_period, _ = initialize_analysis_period_selector(state, ("new.xlsx", 456), min_date, max_date)
 
     assert rerun_period == custom
-    assert new_file_period == (min_date, max_date)
-    assert state[ANALYSIS_PERIOD_PRESET_KEY] == "Toute la p\u00e9riode"
+    assert new_file_period == period_from_preset("30 derniers jours", min_date, max_date)
+    assert state[ANALYSIS_PERIOD_PRESET_KEY] == "30 derniers jours"
 
 
 def test_analysis_period_invalid_saved_value_is_adjusted_before_form_widgets():

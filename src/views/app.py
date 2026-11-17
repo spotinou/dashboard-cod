@@ -157,7 +157,8 @@ def run_app() -> None:
         **data,
     }
 
-    tabs = st.tabs(["Vue globale", "Confirmation", "Livraison & livreurs", "Produits", "Wilayas & alertes", "Validation chiffres", "Donnees nettoyees / export"])
+    # Most used first; Wilayas and Validation (rarely used) at the end.
+    tabs = st.tabs(["Vue globale", "Confirmation", "Livraison & livreurs", "Produits", "Donnees nettoyees / export", "Wilayas & alertes", "Validation chiffres"])
     with tabs[0]:
         render_global_tab(ctx)
     with tabs[1]:
@@ -167,8 +168,8 @@ def run_app() -> None:
     with tabs[3]:
         render_products_tab(ctx)
     with tabs[4]:
-        render_wilayas_tab(ctx)
-    with tabs[5]:
-        render_validation_tab(ctx)
-    with tabs[6]:
         render_data_tab(ctx)
+    with tabs[5]:
+        render_wilayas_tab(ctx)
+    with tabs[6]:
+        render_validation_tab(ctx)

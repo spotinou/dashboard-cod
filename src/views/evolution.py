@@ -15,7 +15,12 @@ from .filters import DATE_TYPE_OPTIONS, apply_date_filter, apply_filter_values, 
 TREND_TICK_FORMAT = {"Jour": "%d/%m", "Semaine": "%d/%m", "Mois": "%m/%Y"}
 TREND_OBJECTIVE_COLOR = "#16a34a"
 # Rate chart -> sidebar threshold used as objective (same as the health gauges)
-TREND_OBJECTIVES = {"taux_confirmation": "confirmation_green", "taux_livraison_total": "delivery_green", "taux_retour": "return_orange"}
+TREND_OBJECTIVES = {
+    "taux_confirmation": "confirmation_green",
+    "taux_livraison_total": "delivery_green",
+    "taux_livraison_finalisees": "delivery_green",
+    "taux_retour": "return_orange",
+}
 
 
 def first_available_date(loaded_df: pd.DataFrame, date_context: dict):

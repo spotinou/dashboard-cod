@@ -50,7 +50,7 @@ def test_default_sidebar_rate_thresholds_are_lowered_by_five_points():
     assert DEFAULT_THRESHOLDS["cancellation_red"] == 0.25
     assert DEFAULT_THRESHOLDS["delivery_green"] == 0.70
     assert DEFAULT_THRESHOLDS["delivery_orange"] == 0.60
-    assert DEFAULT_THRESHOLDS["return_orange"] == 0.10
-    assert DEFAULT_THRESHOLDS["return_red"] == 0.20
+    assert DEFAULT_THRESHOLDS["return_orange"] == 0.25
+    assert DEFAULT_THRESHOLDS["return_red"] == 0.35
     assert DEFAULT_THRESHOLDS["preparation_orange"] == 0.05
     assert DEFAULT_THRESHOLDS["preparation_red"] == 0.15

@@ -2,6 +2,11 @@
 
 Application Streamlit locale pour analyser un export Excel CRM/ERP de commandes COD.
 
+## Réglages par défaut
+
+- Période affichée à l'ouverture d'un fichier : 30 derniers jours.
+- Objectifs : confirmé ≥ 70 %, livré ≥ 70 %, retour ≤ 25 %, annulé ≤ 15 % (modifiables dans la barre latérale).
+
 ## Lancer
 
 ```bash
@@ -11,12 +16,12 @@ streamlit run app.py
 
 ## Ce que le dashboard affiche
 
-- Santé de mon business : taux confirmé, livré, retour et annulé comparés à tes objectifs (seuils de la barre latérale), avec un verdict bon / à surveiller / problème.
-- À traiter aujourd'hui : commandes bloquées trop longtemps en confirmation (> 2 j), en préparation (> 2 j) ou en livraison (> 7 j), avec qui les détient et la liste.
+- Santé de mon business : taux confirmé, taux livré (sur expédiées et sur colis terminés), taux retour et taux annulé comparés à tes objectifs (seuils de la barre latérale), plus le délai moyen de livraison.
+- À traiter aujourd'hui : commandes bloquées trop longtemps en confirmation (> 3 j), en préparation (> 2 j) ou en livraison (> 7 j), avec qui les détient et la liste.
 - Vue globale : reçues, confirmées nettes, annulées, préparation, envoyées, livrées, retours, CA livré et CA bloqué.
 - Où sont mes commandes : toutes les commandes reçues réparties en livrées / en cours / perdues, avec le détail.
-- Comparaison avec la période précédente (commandes reçues, taux confirmé, taux livré, taux retour) et évolution de ces 4 indicateurs dans le temps.
-- Classements : confirmatrices (taux confirmé, taux livré), livreurs (taux livré, taux retour), produits (taux retour, CA livré).
+- Comparaison avec la période précédente et évolution : taux confirmé, taux livré (sur expédiées / sur colis terminés), commandes reçues.
+- Classements : confirmatrices (taux confirmé, taux livré), livreurs (taux livré sur expédiées et sur colis terminés), produits (taux retour, CA livré).
 - Confirmation : performance par personne affectée.
 - Livraison & livreurs : KPI calculés uniquement sur les commandes réellement envoyées.
 - Produits : décisions automatiques à pousser, surveiller, corriger ou échantillon faible.
