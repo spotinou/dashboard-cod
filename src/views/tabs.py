@@ -4,11 +4,12 @@ from __future__ import annotations
 import streamlit as st
 
 from .formatting import SENSITIVE_COLUMNS, TREND_ACCENT, adaptive_height, is_known_value, money, pct, prepare_dataframe_for_display, safe_ratio, sort_for_display, tone_class, top_label, weighted_rate
-from .components import cockpit_heading, decision_summary, render_data_table, render_quality_badge, render_section_kpis, render_selectable_data_table, selected_index, show_drilldown, tab_header
+from .components import render_priority_focus, cockpit_heading, decision_summary, render_data_table, render_quality_badge, render_section_kpis, render_selectable_data_table, selected_index, show_drilldown, tab_header
 from .filters import render_active_filters_banner, render_date_context
 from .analysis import build_export, confirmation_summary, delivery_summary, product_summary, validation_summary, validation_value, wilaya_summary
 from ..rankings import group_card_rates
-from .overview import confirmation_funnel_counts, displayed_reception_rates, render_owner_global_dashboard
+from .overview import confirmation_funnel_counts, displayed_reception_rates, render_owner_journey, render_owner_money
+from .health_view import render_health_section, render_stuck_orders_section
 from .evolution import render_trend_section
 from .ranking_charts import render_amount_ranking, render_rate_ranking
 from .flow_charts import render_order_status_section
@@ -26,9 +27,15 @@ def render_global_tab(ctx: dict) -> None:
     render_quality_badge(validation_checks)
     render_date_context(date_context)
     render_active_filters_banner(date_context)
+    # Morning / evening check, most important first; money comes last.
+    render_health_section(global_metrics, thresholds)
     render_order_status_section(global_metrics)
-    render_owner_global_dashboard(df, global_metrics, thresholds, priority_actions)
+    render_stuck_orders_section(df, loaded_df)
     render_trend_section(df, loaded_df, date_context, global_metrics, thresholds)
+    render_owner_journey(global_metrics, thresholds)
+    if priority_actions is not None:
+        render_priority_focus(priority_actions)
+    render_owner_money(df, global_metrics)
 
 
 def render_confirmation_tab(ctx: dict) -> None:
@@ -61,6 +68,7 @@ def render_confirmation_tab(ctx: dict) -> None:
         render_rate_ranking(
             confirmatrice_rates, "confirmatrice", "taux_confirme", "commandes_confirmees", "commandes_recues",
             "commandes_recues", "re\u00e7ues", volume_confirmatrice, "Taux confirm\u00e9", "", True, "rank_confirmatrice_confirme",
+            average=funnel_confirmation_display_rate,
         )
     with col2:
         render_rate_ranking(

@@ -173,6 +173,14 @@ def render_owner_global_dashboard(
     thresholds: dict[str, float],
     priority_actions: pd.DataFrame | None = None,
 ) -> None:
+    render_owner_journey(metrics, thresholds)
+    render_owner_money(df, metrics)
+    if priority_actions is not None:
+        render_priority_focus(priority_actions)
+
+
+def render_owner_journey(metrics: dict, thresholds: dict[str, float]) -> None:
+    """The "Parcours COD" cards (unchanged content)."""
     cockpit_heading(
         "Parcours COD",
         "Réception : confirmées + en cours de confirmation + annulées = 100,0 %. Les étapes suivantes utilisent leur base affichée.",
@@ -181,13 +189,15 @@ def render_owner_global_dashboard(
     render_stage_kpis("1. Reception", "Ce qui entre dans le funnel et ce qui en sort avant expedition.", journey[:4])
     render_stage_kpis("2. Execution", "Les commandes confirmees progressent vers une livraison finalisee.", journey[4:8])
     render_stage_kpis("3. Resultat", "La transformation brute replace la livraison dans le volume recu.", journey[8:])
+
+
+def render_owner_money(df: pd.DataFrame, metrics: dict) -> None:
+    """The "Argent / Chiffre d'affaires" cards (unchanged content)."""
     cockpit_heading(
         "Argent / Chiffre d'affaires",
         "CA potentiel, bloqu\u00e9, s\u00e9curis\u00e9 ou perdu sur le p\u00e9rim\u00e8tre actif.",
     )
     render_section_kpis(owner_money_sections(metrics, amount_totals(df, metrics)), max_per_row=4)
-    if priority_actions is not None:
-        render_priority_focus(priority_actions)
 
 
 def render_global_business_kpis(metrics: dict, thresholds: dict[str, float]) -> None:

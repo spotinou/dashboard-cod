@@ -13,6 +13,9 @@ from .filters import DATE_TYPE_OPTIONS, apply_date_filter, apply_filter_values, 
 
 
 TREND_TICK_FORMAT = {"Jour": "%d/%m", "Semaine": "%d/%m", "Mois": "%m/%Y"}
+TREND_OBJECTIVE_COLOR = "#16a34a"
+# Rate chart -> sidebar threshold used as objective (same as the health gauges)
+TREND_OBJECTIVES = {"taux_confirmation": "confirmation_green", "taux_livraison_total": "delivery_green", "taux_retour": "return_orange"}
 
 
 def first_available_date(loaded_df: pd.DataFrame, date_context: dict):
@@ -89,9 +92,12 @@ def format_period_label(value, granularity: str) -> str:
     return ts.strftime("%d/%m/%Y")
 
 
-def trend_reading_text(reading: dict, kind: str, higher_is_better: bool) -> tuple[str, str, str]:
+def trend_reading_text(reading: dict, kind: str, higher_is_better: bool, objective=None) -> tuple[str, str, str]:
     """(pill label, pill tone, one short line) for a chart header."""
     better = "plus haut = mieux" if higher_is_better else "plus bas = mieux"
+    if objective is not None:
+        symbol = "\u2265" if higher_is_better else "\u2264"
+        better = f"Objectif : <b>{symbol} {html_text(pct(objective))}</b>"
     if reading.get("last_period") is None:
         return "\u00c0 confirmer", "neutral", f"Pas encore assez de semaines termin\u00e9es \u00b7 {better}"
     label = {"up": "\u25b2 En hausse", "down": "\u25bc En baisse", "flat": "= Stable"}.get(reading.get("direction"), "\u2014")
@@ -99,8 +105,8 @@ def trend_reading_text(reading: dict, kind: str, higher_is_better: bool) -> tupl
     return label, reading.get("tone", "neutral"), f"Moyenne : <b>{average}</b> \u00b7 {better}"
 
 
-def render_trend_card_header(title: str, higher_is_better: bool, reading: dict, kind: str) -> None:
-    pill, tone, sentence = trend_reading_text(reading, kind, higher_is_better)
+def render_trend_card_header(title: str, higher_is_better: bool, reading: dict, kind: str, objective=None) -> None:
+    pill, tone, sentence = trend_reading_text(reading, kind, higher_is_better, objective)
     bg, fg = TREND_TONE_COLORS.get(tone, TREND_TONE_COLORS["neutral"])
     st.markdown(
         f"""
@@ -129,7 +135,7 @@ def _hover_values(trend: pd.DataFrame, key: str, kind: str, provisional: pd.Seri
     return labels
 
 
-def build_metric_trend_figure(trend: pd.DataFrame, key: str, kind: str, form: str, depends_on_delivery: bool, granularity: str = "Jour", average=None):
+def build_metric_trend_figure(trend: pd.DataFrame, key: str, kind: str, form: str, depends_on_delivery: bool, granularity: str = "Jour", average=None, objective=None):
     """A single-metric chart: one series, its average, provisional periods shown lighter."""
     if trend.empty or len(trend) < 2 or key not in trend.columns:
         return None
@@ -158,12 +164,23 @@ def build_metric_trend_figure(trend: pd.DataFrame, key: str, kind: str, form: st
             },
             hovertext=hover, hoverinfo="text",
         )
+    references = []  # (value, label, colour, dash): labelled in the right margin so they never hide a point
     if average is not None and not pd.isna(average):
-        fig.add_hline(y=float(average), line_color=TREND_AVERAGE_COLOR, line_width=1, line_dash="dash")
+        references.append((float(average), "moyenne", TREND_AVERAGE_COLOR, "dash"))
+    if objective is not None and not pd.isna(objective):
+        references.append((float(objective), "objectif", TREND_OBJECTIVE_COLOR, "solid"))
+    for index, (y, label, color, dash) in enumerate(references):
+        fig.add_hline(y=y, line_color=color, line_width=1.5 if label == "objectif" else 1, line_dash=dash)
+        close = index == 1 and abs(references[0][0] - y) < 0.03
+        fig.add_annotation(
+            x=1, xref="paper", xanchor="left", y=y, yref="y", text=label, showarrow=False,
+            font={"size": 11, "color": color}, xshift=4, yshift=(-9 if y < references[0][0] else 9) if close else 0,
+        )
     if kind == "rate":
         finite = values.dropna()
-        low = float(min(finite.min(), average if average is not None else finite.min())) if not finite.empty else 0.0
-        high = float(max(finite.max(), average if average is not None else finite.max())) if not finite.empty else 1.0
+        bounds = [y for y, _, _, _ in references]
+        low = float(min([finite.min()] + bounds)) if not finite.empty else 0.0
+        high = float(max([finite.max()] + bounds)) if not finite.empty else 1.0
         pad = max(0.05, (high - low) * 0.25)
         fig.update_yaxes(tickformat=".0%", range=[max(0.0, low - pad), min(1.0, high + pad)])
     elif kind == "money":
@@ -175,7 +192,7 @@ def build_metric_trend_figure(trend: pd.DataFrame, key: str, kind: str, form: st
         showlegend=False,
         hovermode="closest",
         separators=", ",
-        margin={"l": 8, "r": 8, "t": 10, "b": 8},
+        margin={"l": 8, "r": 64, "t": 10, "b": 8},
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         hoverlabel={"bgcolor": "#ffffff", "font": {"color": "#0f172a", "size": 12}},
@@ -185,11 +202,13 @@ def build_metric_trend_figure(trend: pd.DataFrame, key: str, kind: str, form: st
     return fig
 
 
-def render_metric_trend(trend: pd.DataFrame, spec: tuple, granularity: str) -> None:
+def render_metric_trend(trend: pd.DataFrame, spec: tuple, granularity: str, thresholds: dict[str, float] | None = None) -> None:
     key, title, explanation, kind, higher_is_better, form, depends_on_delivery = spec
+    objective_key = TREND_OBJECTIVES.get(key)
+    objective = float(thresholds[objective_key]) if thresholds and objective_key in thresholds else None
     reading = trend_reading(trend, key, kind, higher_is_better, depends_on_delivery)
-    render_trend_card_header(title, higher_is_better, reading, kind)
-    fig = build_metric_trend_figure(trend, key, kind, form, depends_on_delivery, granularity, reading.get("average"))
+    render_trend_card_header(title, higher_is_better, reading, kind, objective)
+    fig = build_metric_trend_figure(trend, key, kind, form, depends_on_delivery, granularity, reading.get("average"), objective)
     if fig is None:
         st.info("Pas assez de données pour ce graphique.")
         return
@@ -224,7 +243,7 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
         unit = {"Jour": "jour", "Semaine": "semaine", "Mois": "mois"}[granularity]
         cockpit_heading(
             "\u00c9volution de mes taux",
-            f"Un point par {unit}. Ligne grise = moyenne. En clair = {unit} pas encore termin\u00e9 ou colis encore en route (pas d\u00e9finitif).",
+            f"Un point par {unit}. Ligne verte = ton objectif, ligne grise = ta moyenne. En clair = {unit} pas encore termin\u00e9 ou colis encore en route.",
         )
         trend = compute_trend(df, date_context.get("date_column"), granularity, date_context.get("start_date"), date_context.get("end_date"))
         if len(trend) < 2:
@@ -234,6 +253,6 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
             cols = st.columns(2, gap="large")
             for col, spec in zip(cols, TREND_CHARTS[start:start + 2]):
                 with col:
-                    render_metric_trend(trend, spec, granularity)
+                    render_metric_trend(trend, spec, granularity, thresholds)
     except Exception as exc:  # never let the new section break the existing dashboard
         st.warning(f"Section évolution indisponible pour ce fichier : {exc}")

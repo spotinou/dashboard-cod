@@ -11,6 +11,8 @@ streamlit run app.py
 
 ## Ce que le dashboard affiche
 
+- Santé de mon business : taux confirmé, livré, retour et annulé comparés à tes objectifs (seuils de la barre latérale), avec un verdict bon / à surveiller / problème.
+- À traiter aujourd'hui : commandes bloquées trop longtemps en confirmation (> 2 j), en préparation (> 2 j) ou en livraison (> 7 j), avec qui les détient et la liste.
 - Vue globale : reçues, confirmées nettes, annulées, préparation, envoyées, livrées, retours, CA livré et CA bloqué.
 - Où sont mes commandes : toutes les commandes reçues réparties en livrées / en cours / perdues, avec le détail.
 - Comparaison avec la période précédente (commandes reçues, taux confirmé, taux livré, taux retour) et évolution de ces 4 indicateurs dans le temps.
@@ -36,6 +38,7 @@ Calculs (aucun affichage) :
 - `src/metrics.py` : agrégations et KPI.
 - `src/validation.py` : contrôles de cohérence des chiffres.
 - `src/alerts.py` : alertes décisionnelles.
+- `src/health.py` : santé (taux vitaux vs objectifs) et commandes bloquées.
 - `src/flows.py` : répartition des commandes (livrées / en cours / perdues).
 - `src/rankings.py` : classements (livreurs, confirmatrices, produits, wilayas).
 - `src/trends.py` : évolution dans le temps et comparaison avec la période précédente.
@@ -47,6 +50,7 @@ Affichage (`src/views/`, un fichier par thème) :
 - `filters.py` : période d'analyse, type de date et filtres de la barre latérale.
 - `analysis.py` : analyses du dashboard (conseils produits, croisements, résumés, export Excel).
 - `overview.py` : cartes KPI de la Vue globale.
+- `health_view.py` : « Santé de mon business » et « À traiter aujourd'hui ».
 - `evolution.py`, `ranking_charts.py`, `flow_charts.py` : évolution et comparaison, classements, « Où sont mes commandes ».
 - `charts.py` : anciens graphiques en barres (conservés).
 - `components.py` : briques réutilisables (cartes, titres, tableaux).

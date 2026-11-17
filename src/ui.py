@@ -186,6 +186,8 @@ from .views.overview import (  # noqa: F401
     render_global_kpi_blocks,
     render_global_mini_tables,
     render_owner_global_dashboard,
+    render_owner_journey,
+    render_owner_money,
     render_secondary_kpis,
 )
 from .views.charts import (  # noqa: F401
@@ -196,6 +198,8 @@ from .views.charts import (  # noqa: F401
     percent_bar,
 )
 from .views.evolution import (  # noqa: F401
+    TREND_OBJECTIVES,
+    TREND_OBJECTIVE_COLOR,
     TREND_TICK_FORMAT,
     _hover_values,
     build_metric_trend_figure,
@@ -239,4 +243,14 @@ from .views.tabs import (  # noqa: F401
     render_products_tab,
     render_validation_tab,
     render_wilayas_tab,
+)
+from .views.health_view import (  # noqa: F401
+    STEP_ICONS,
+    VERDICT_STYLE,
+    overall_text,
+    render_health_section,
+    render_stuck_orders_section,
+    stuck_card_html,
+    stuck_orders_table,
+    vital_sign_html,
 )

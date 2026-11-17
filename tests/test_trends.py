@@ -118,8 +118,9 @@ def test_period_comparison_deltas_and_tones():
 
     assert rows["orders_received"]["delta"] == 0.0
     assert rows["orders_received"]["direction"] == "flat"
-    # Confirmation 100 % vs 66.7 % -> +33.3 pts, good
-    assert rows["confirmation_display_rate"]["delta"] == pytest.approx(1 / 3)
+    # Confirmation 100 % vs 66.7 % (card value, rounded like the card) -> +33.3 pts, good
+    assert rows["confirmation_display_rate"]["previous"] == 0.667
+    assert rows["confirmation_display_rate"]["delta"] == pytest.approx(0.333)
     assert rows["confirmation_display_rate"]["tone"] == "good"
     # Return rate 0 % vs 50 % -> going down, but 1 of the 3 parcels (33 %) is still
     # on the road: the delivery figures are provisional and not judged

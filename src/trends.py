@@ -159,10 +159,22 @@ def in_transit_share(metrics: dict) -> float | None:
     return safe_divide(float(max(sent - done, 0)), float(sent))
 
 
+def card_confirmation_rate(metrics: dict) -> float | None:
+    """The "Taux confirmé" exactly as the KPI card shows it.
+
+    Same rule as ``displayed_reception_rates``: confirmed + in confirmation +
+    cancelled are rounded to add up to exactly 100.0 %."""
+    received = int(metrics.get("orders_received", 0) or 0)
+    if received == 0:
+        return None
+    pending_tenths = round(int(metrics.get("orders_in_confirmation", 0) or 0) / received * 1000)
+    cancelled_tenths = round(int(metrics.get("orders_cancelled", 0) or 0) / received * 1000)
+    return max(0, 1000 - pending_tenths - cancelled_tenths) / 1000
+
+
 def comparison_values(metrics: dict) -> dict:
     values = dict(metrics)
-    received = int(metrics.get("orders_received", 0) or 0)
-    values["confirmation_display_rate"] = safe_divide(float(exclusive_confirmed(metrics)), float(received))
+    values["confirmation_display_rate"] = card_confirmation_rate(metrics)
     return values
 
 
