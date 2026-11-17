@@ -28,11 +28,11 @@ def render_global_tab(ctx: dict) -> None:
     render_date_context(date_context)
     render_active_filters_banner(date_context)
     # Morning / evening check, most important first; money comes last.
-    render_health_section(global_metrics, thresholds, df)
+    render_owner_journey(global_metrics, thresholds)
     render_order_status_section(global_metrics)
     render_stuck_orders_section(df, loaded_df)
     render_trend_section(df, loaded_df, date_context, global_metrics, thresholds)
-    render_owner_journey(global_metrics, thresholds)
+    render_health_section(global_metrics, thresholds, df)
     if priority_actions is not None:
         render_priority_focus(priority_actions)
     with st.expander("\U0001f4b0 Argent / Chiffre d'affaires", expanded=False):
