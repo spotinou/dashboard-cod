@@ -34,7 +34,9 @@ DISPLAY_COLUMNS = {
     "taux_en_cours_livraison": "Taux en cours livraison",
     "taux_en_cours_logistique": "Taux en cours logistique",
     "taux_retour": "Taux retour",
-    "taux_transformation_reel": "Taux transformation réel",
+    "taux_transformation_reel": "Taux transformation brute",
+    "taux_transformation_brute": "Taux transformation brute",
+    "taux_transformation_nette": "Taux transformation nette",
     "ca_livre": "CA livré finalisé",
     "ca_dispatch": "CA en dispatch",
     "ca_bloque_livraison": "CA en cours livraison",
@@ -179,7 +181,7 @@ def is_money_column(col: str) -> bool:
 def style_level(value: float | None, kind: str, thresholds: dict[str, float]) -> str:
     if value is None or pd.isna(value):
         return "#6b7280"
-    if kind in {"confirmation", "delivery"}:
+    if kind in {"confirmation", "delivery", "transformation", "net_transformation"} and f"{kind}_green" in thresholds:
         return "#16a34a" if value >= thresholds[f"{kind}_green"] else "#f59e0b" if value >= thresholds[f"{kind}_orange"] else "#dc2626"
     if kind == "return":
         return "#16a34a" if value <= thresholds["return_orange"] else "#f59e0b" if value <= thresholds["return_red"] else "#dc2626"
@@ -197,9 +199,33 @@ def html_text(value) -> str:
     return escape(str(value if value is not None else DASH))
 
 
+# Hover bubble ("ⓘ") shown next to any title that contains one of these terms.
+GLOSSARY = {
+    "transformation brute": (
+        "Sur 100 commandes reçues, combien sont livrées au client. "
+        "Calcul : livrées ÷ reçues. C'est le taux de bout en bout : il compte tout, même les annulations."
+    ),
+    "transformation nette": (
+        "Comme la brute, mais sans les commandes annulées (faux numéros, doublons, refus au téléphone). "
+        "Calcul : livrées ÷ (reçues − annulées)."
+    ),
+}
+
+
+def help_icon(title: str) -> str:
+    """HTML hover bubble for a title that names a glossary term, else an empty string."""
+    lowered = str(title).lower()
+    for term, text in GLOSSARY.items():
+        if term in lowered:
+            return f'<span class="help-tip" data-tip="{html_text(text)}">\u24d8</span>'
+    return ""
+
+
 def tone_class(value: float | None, kind: str, thresholds: dict[str, float]) -> str:
     if value is None or pd.isna(value):
         return "neutral"
+    if kind in {"transformation", "net_transformation"} and f"{kind}_green" in thresholds:
+        return "good" if value >= thresholds[f"{kind}_green"] else "warn" if value >= thresholds[f"{kind}_orange"] else "bad"
     if kind in {"confirmation", "delivery", "transformation"}:
         return "good" if value >= thresholds["delivery_green"] else "warn" if value >= thresholds["delivery_orange"] else "bad"
     if kind == "return":
@@ -255,6 +281,10 @@ def metric_color(value, col: str, thresholds: dict[str, float]) -> str:
         kind = "confirmation"
     elif col in {"taux_livraison_finalisees", "taux_livraison_total", "taux_en_cours_livraison"}:
         kind = "delivery"
+    elif col in {"taux_transformation_reel", "taux_transformation_brute"}:
+        kind = "transformation"
+    elif col == "taux_transformation_nette":
+        kind = "net_transformation"
     elif col == "taux_retour":
         kind = "return"
     elif col == "taux_annulation":

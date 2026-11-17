@@ -8,6 +8,7 @@ from .components import render_priority_focus, cockpit_heading, decision_summary
 from .filters import render_active_filters_banner, render_date_context
 from .analysis import build_export, confirmation_summary, delivery_summary, product_summary, validation_summary, validation_value, wilaya_summary
 from ..rankings import group_card_rates
+from ..trends import net_transformation_rate
 from .overview import confirmation_funnel_counts, displayed_reception_rates, render_owner_journey, render_owner_money
 from .health_view import render_health_section, render_stuck_orders_section
 from .evolution import render_trend_section
@@ -57,6 +58,7 @@ def render_confirmation_tab(ctx: dict) -> None:
             ("Taux en préparation", pct(funnel_preparation_rate), f"{global_metrics['orders_preparation']} commandes en préparation\nBase : {funnel_confirmed} confirmées", tone_class(funnel_preparation_rate, "preparation", thresholds)),
             ("Taux livré", pct(global_metrics["delivery_total_rate_on_sent"]), f"{global_metrics['orders_delivered']} commandes livrées\nBase : {global_metrics['orders_sent']} expédiées", tone_class(global_metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
             ("Taux de transformation brute", pct(global_metrics["transformation_real_rate"]), f"{global_metrics['orders_delivered']} livrées / {global_metrics['orders_received']} reçues", tone_class(global_metrics.get("transformation_real_rate"), "transformation", thresholds)),
+            ("Taux de transformation nette", pct(net_transformation_rate(global_metrics)), f"{global_metrics['orders_delivered']} livrées / {global_metrics['orders_confirmed_net']} reçues hors annulées", tone_class(net_transformation_rate(global_metrics), "net_transformation", thresholds)),
             ("Taux annulé", pct(funnel_cancellation_display_rate), f"{global_metrics['orders_cancelled']} commandes annulées\nBase : {global_metrics['orders_received']} reçues", tone_class(global_metrics.get("cancellation_rate"), "cancellation", thresholds)),
         ],
         max_per_row=3,
@@ -75,6 +77,17 @@ def render_confirmation_tab(ctx: dict) -> None:
         render_rate_ranking(
             confirmatrice_rates, "confirmatrice", "taux_livre", "livrees", "commandes_envoyees",
             "commandes_envoyees", "exp\u00e9di\u00e9es", volume_confirmatrice, "Taux livr\u00e9 de leurs commandes (sur exp\u00e9di\u00e9es)", "", True, "rank_confirmatrice_livre",
+        )
+    col1, col2 = st.columns(2, gap="large")
+    with col1:
+        render_rate_ranking(
+            confirmatrice_rates, "confirmatrice", "taux_transformation_brute", "livrees", "commandes_recues",
+            "commandes_recues", "re\u00e7ues", volume_confirmatrice, "Taux de transformation brute", "", True, "rank_confirmatrice_brute",
+        )
+    with col2:
+        render_rate_ranking(
+            confirmatrice_rates, "confirmatrice", "taux_transformation_nette", "livrees", "commandes_confirmees_nettes",
+            "commandes_confirmees_nettes", "re\u00e7ues nettes", volume_confirmatrice, "Taux de transformation nette", "", True, "rank_confirmatrice_nette",
         )
 
     with st.expander("📋 Voir le détail par confirmatrice (tableau)", expanded=False):
@@ -112,6 +125,7 @@ def render_delivery_tab(ctx: dict) -> None:
             ("Taux en cours de livraison", pct(global_metrics.get("in_delivery_rate_on_sent")), f"{global_metrics['orders_in_delivery']} commandes en livraison\nBase : {global_metrics['orders_sent']} exp\u00e9di\u00e9es", "warn" if global_metrics.get("orders_in_delivery", 0) else "good"),
             ("Taux livr\u00e9", pct(global_metrics["delivery_total_rate_on_sent"]), f"{global_metrics['orders_delivered']} commandes livr\u00e9es\nBase : {global_metrics['orders_sent']} exp\u00e9di\u00e9es", tone_class(global_metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
             ("Taux de transformation brute", pct(global_metrics["transformation_real_rate"]), f"{global_metrics['orders_delivered']} livr\u00e9es / {global_metrics['orders_received']} re\u00e7ues", tone_class(global_metrics.get("transformation_real_rate"), "transformation", thresholds)),
+            ("Taux de transformation nette", pct(net_transformation_rate(global_metrics)), f"{global_metrics['orders_delivered']} livrées / {global_metrics['orders_confirmed_net']} reçues hors annulées", tone_class(net_transformation_rate(global_metrics), "net_transformation", thresholds)),
             ("Taux retour", pct(global_metrics["return_rate_on_sent"]), f"{global_metrics['orders_returned_failed']} retours / \u00e9checs\nBase : {global_metrics['orders_sent']} exp\u00e9di\u00e9es", tone_class(global_metrics.get("return_rate_on_sent"), "return", thresholds)),
         ],
         max_per_row=3,
@@ -178,7 +192,8 @@ def render_products_tab(ctx: dict) -> None:
         ("CA livre total", money(products["ca_livre"].sum() if "ca_livre" in products.columns else 0), f"{int(products['livrees'].sum()) if 'livrees' in products.columns else 0} livrees", "good"),
         ("En cours logistique", int(products["en_cours_logistique"].sum()) if "en_cours_logistique" in products.columns else 0, f"{pct(weighted_rate(products, 'en_cours_logistique', 'commandes_envoyees'))} des expediees", "warn"),
         ("Perte CA retours", money(products["ca_retours"].sum() if "ca_retours" in products.columns else 0), f"{int(products['retours'].sum()) if 'retours' in products.columns else 0} retours", "loss"),
-        ("Transformation reelle", pct(weighted_rate(products, "livrees", "commandes_recues")), "livrees / recues", tone_class(weighted_rate(products, "livrees", "commandes_recues"), "transformation", thresholds)),
+        ("Taux de transformation brute", pct(weighted_rate(products, "livrees", "commandes_recues")), "livrees / recues", tone_class(weighted_rate(products, "livrees", "commandes_recues"), "transformation", thresholds)),
+        ("Taux de transformation nette", pct(weighted_rate(products, "livrees", "commandes_confirmees_nettes")), "livrees / recues hors annulees", tone_class(weighted_rate(products, "livrees", "commandes_confirmees_nettes"), "net_transformation", thresholds)),
     ])
 
     with st.expander("📋 Voir le détail par produit (tableau)", expanded=False):

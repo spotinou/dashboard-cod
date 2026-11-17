@@ -4,7 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .formatting import DASH, TREND_TONE_COLORS, adaptive_height, display_subset, html_text, money, prepare_table_for_streamlit, style_metric_table
+from .formatting import DASH, TREND_TONE_COLORS, adaptive_height, display_subset, help_icon, html_text, money, prepare_table_for_streamlit, style_metric_table
 from .analysis import data_quality_has_warning
 
 
@@ -67,7 +67,7 @@ def mini_card(title: str, value: str, note: str = "", tone: str = "neutral", bad
     st.markdown(
         f"""
         <div class="mini-card {tone}">
-          <div class="mini-head"><div class="mini-title">{html_text(title)}</div>{badge_html}</div>
+          <div class="mini-head"><div class="mini-title">{html_text(title)}{help_icon(title)}</div>{badge_html}</div>
           <div class="mini-value">{html_text(value)}</div>
           <div class="mini-note">{html_text(note)}</div>
         </div>
@@ -213,7 +213,7 @@ def render_chart_header(title: str, explanation: str, pill: str, sentence_html: 
         f"""
         <div style="margin:6px 0 4px;min-height:{min_height}px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span style="font-size:15px;font-weight:850;color:#0f172a">{html_text(title)}</span>
+            <span style="font-size:15px;font-weight:850;color:#0f172a">{html_text(title)}{help_icon(title)}</span>
             <span style="background:{bg};color:{fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{html_text(pill)}</span>
           </div>
           <div style="font-size:12.5px;color:#475569;margin-top:2px">{explanation}</div>

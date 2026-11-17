@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .trends import card_confirmation_rate
+from .trends import card_confirmation_rate, net_transformation_rate
 
 GOOD, WARN, BAD, UNKNOWN = "good", "warn", "bad", "neutral"
 
@@ -18,6 +18,8 @@ VITAL_SIGNS = [
     ("confirmation", "Taux confirmé", "Sur 100 commandes reçues, {n} sont confirmées", True, ("confirmation_green", "confirmation_orange")),
     ("delivery", "Taux livré (sur expédiées)", "Sur 100 colis expédiés, {n} sont livrés", True, ("delivery_green", "delivery_orange")),
     ("delivery_finalized", "Taux livré (sur colis terminés)", "Sur 100 colis arrivés au bout (livrés ou revenus), {n} sont livrés", True, ("delivery_green", "delivery_orange")),
+    ("transformation", "Taux de transformation brute", "Sur 100 commandes reçues, {n} sont livrées", True, ("transformation_green", "transformation_orange")),
+    ("net_transformation", "Taux de transformation nette", "Sur 100 commandes reçues hors annulées, {n} sont livrées", True, ("net_transformation_green", "net_transformation_orange")),
     ("return", "Taux retour", "Sur 100 colis expédiés, {n} reviennent", False, ("return_orange", "return_red")),
     ("cancellation", "Taux annulé", "Sur 100 commandes reçues, {n} sont annulées", False, ("cancellation_orange", "cancellation_red")),
 ]
@@ -32,6 +34,8 @@ def vital_rate(metrics: dict, key: str) -> float | None:
     return {
         "delivery": metrics.get("delivery_total_rate_on_sent"),
         "delivery_finalized": metrics.get("delivery_finalized_rate"),
+        "transformation": metrics.get("transformation_real_rate"),
+        "net_transformation": net_transformation_rate(metrics),
         "return": metrics.get("return_rate_on_sent"),
         "cancellation": metrics.get("cancellation_rate"),
     }[key]

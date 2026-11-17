@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from ..trends import net_transformation_rate
 from .formatting import html_text, money, pct, safe_ratio, tone_class, top_known
 from .components import cockpit_heading, hero_card, mini_card, render_data_table, render_kpi_stack, render_priority_focus, render_section_kpis, render_stage_kpis
 from .analysis import amount_totals
@@ -154,6 +155,7 @@ def owner_kpi_sections(metrics: dict, thresholds: dict[str, float]) -> list[tupl
         ("Taux en cours de livraison", pct(in_delivery_rate), f"{in_delivery} commandes en livraison\nBase : {sent} expédiées", "warn" if in_delivery else "good"),
         ("Taux livré", pct(metrics.get("delivery_total_rate_on_sent")), f"{delivered} commandes livrées\nBase : {sent} expédiées", tone_class(metrics.get("delivery_total_rate_on_sent"), "delivery", thresholds)),
         ("Taux de transformation brute", pct(metrics.get("transformation_real_rate")), f"{delivered} livrées / {received} reçues", tone_class(metrics.get("transformation_real_rate"), "transformation", thresholds)),
+        ("Taux de transformation nette", pct(net_transformation_rate(metrics)), f"{delivered} livrées / {int(metrics.get('orders_confirmed_net', 0) or 0)} reçues hors annulées", tone_class(net_transformation_rate(metrics), "net_transformation", thresholds)),
         ("Taux annulé", pct(cancellation_display_rate), f"{cancelled} commandes annulées\nBase : {received} reçues", tone_class(metrics.get("cancellation_rate"), "cancellation", thresholds)),
     ]
 
@@ -187,8 +189,8 @@ def render_owner_journey(metrics: dict, thresholds: dict[str, float]) -> None:
     )
     journey = owner_kpi_sections(metrics, thresholds)
     render_stage_kpis("1. Reception", "Ce qui entre dans le funnel et ce qui en sort avant expedition.", journey[:4])
-    render_stage_kpis("2. Execution", "Les commandes confirmees progressent vers une livraison finalisee.", journey[4:8])
-    render_stage_kpis("3. Resultat", "La transformation brute replace la livraison dans le volume recu.", journey[8:])
+    render_stage_kpis("2. Execution", "Les commandes confirmees progressent vers une livraison finalisee.", journey[4:7])
+    render_stage_kpis("3. Resultat", "Sur 100 commandes reçues, combien finissent livrées (brute : toutes les reçues ; nette : hors annulées).", journey[7:])
 
 
 def render_owner_money(df: pd.DataFrame, metrics: dict) -> None:

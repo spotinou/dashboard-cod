@@ -7,7 +7,7 @@ import streamlit as st
 
 from ..metrics import compute_global_metrics
 from ..trends import TREND_CHARTS, auto_granularity, compute_period_comparison, compute_trend, previous_period, provisional_mask, trend_reading
-from .formatting import DASH, TREND_ACCENT, TREND_ACCENT_LIGHT, TREND_AVERAGE_COLOR, TREND_GRID_COLOR, TREND_TONE_COLORS, format_date, html_text, money, pct
+from .formatting import DASH, TREND_ACCENT, TREND_ACCENT_LIGHT, TREND_AVERAGE_COLOR, TREND_GRID_COLOR, TREND_TONE_COLORS, format_date, help_icon, html_text, money, pct
 from .components import cockpit_heading, render_section_kpis
 from .filters import DATE_TYPE_OPTIONS, apply_date_filter, apply_filter_values, date_series, detect_date_columns, get_date_column
 
@@ -20,6 +20,8 @@ TREND_OBJECTIVES = {
     "taux_livraison_total": "delivery_green",
     "taux_livraison_finalisees": "delivery_green",
     "taux_retour": "return_orange",
+    "taux_transformation_reel": "transformation_green",
+    "taux_transformation_nette": "net_transformation_green",
 }
 
 
@@ -117,7 +119,7 @@ def render_trend_card_header(title: str, higher_is_better: bool, reading: dict, 
         f"""
         <div style="margin:6px 0 0">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span style="font-size:15px;font-weight:850;color:#0f172a">{html_text(title)}</span>
+            <span style="font-size:15px;font-weight:850;color:#0f172a">{html_text(title)}{help_icon(title)}</span>
             <span style="background:{bg};color:{fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{html_text(pill)}</span>
           </div>
           <div style="font-size:12.5px;color:#475569;margin-top:2px">{sentence}</div>
@@ -242,7 +244,7 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
                 st.caption("Aucune commande sur la période précédente.")
         else:
             rows = compute_period_comparison(global_metrics, compute_global_metrics(prev_df))
-            render_section_kpis(comparison_cards(rows, window), max_per_row=4)
+            render_section_kpis(comparison_cards(rows, window), max_per_row=6)
 
         granularity = auto_granularity(date_context.get("start_date"), date_context.get("end_date"))
         unit = {"Jour": "jour", "Semaine": "semaine", "Mois": "mois"}[granularity]
