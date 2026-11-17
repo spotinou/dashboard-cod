@@ -28,14 +28,15 @@ def render_global_tab(ctx: dict) -> None:
     render_date_context(date_context)
     render_active_filters_banner(date_context)
     # Morning / evening check, most important first; money comes last.
-    render_health_section(global_metrics, thresholds)
+    render_health_section(global_metrics, thresholds, df)
     render_order_status_section(global_metrics)
     render_stuck_orders_section(df, loaded_df)
     render_trend_section(df, loaded_df, date_context, global_metrics, thresholds)
     render_owner_journey(global_metrics, thresholds)
     if priority_actions is not None:
         render_priority_focus(priority_actions)
-    render_owner_money(df, global_metrics)
+    with st.expander("\U0001f4b0 Argent / Chiffre d'affaires", expanded=False):
+        render_owner_money(df, global_metrics)
 
 
 def render_confirmation_tab(ctx: dict) -> None:
@@ -73,16 +74,17 @@ def render_confirmation_tab(ctx: dict) -> None:
     with col2:
         render_rate_ranking(
             confirmatrice_rates, "confirmatrice", "taux_livre", "livrees", "commandes_envoyees",
-            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_confirmatrice, "Taux livr\u00e9 de leurs commandes", "", True, "rank_confirmatrice_livre",
+            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_confirmatrice, "Taux livr\u00e9 de leurs commandes (sur exp\u00e9di\u00e9es)", "", True, "rank_confirmatrice_livre",
         )
 
-    cockpit_heading("Performance detaillee", "Clique sur une ligne pour afficher les commandes concernees.")
-    confirmation_cols = ["confirmatrice", "fiabilite_volume", "commandes_recues", "commandes_annulees", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "retours", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
-    event, confirmation_view = render_selectable_data_table(confirmation_display, confirmation_cols, "confirmation_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_recues")
-    idx = selected_index(event)
-    if idx is not None and idx < len(confirmation_view):
-        row = confirmation_view.iloc[idx]
-        show_drilldown(df, "confirmatrice", "Affectée à", row["confirmatrice"], "Commandes annulees", "confirmation")
+    with st.expander("📋 Voir le détail par confirmatrice (tableau)", expanded=False):
+        st.caption("Clique sur une ligne pour afficher les commandes concernees.")
+        confirmation_cols = ["confirmatrice", "fiabilite_volume", "commandes_recues", "commandes_annulees", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "retours", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
+        event, confirmation_view = render_selectable_data_table(confirmation_display, confirmation_cols, "confirmation_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_recues")
+        idx = selected_index(event)
+        if idx is not None and idx < len(confirmation_view):
+            row = confirmation_view.iloc[idx]
+            show_drilldown(df, "confirmatrice", "Affectée à", row["confirmatrice"], "Commandes annulees", "confirmation")
 
     with st.expander("Analyse Confirmatrice x Produit", expanded=False):
         cp_cols = ["confirmatrice", "produit", "fiabilite_volume", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_retours", "lecture_rapide"]
@@ -121,25 +123,29 @@ def render_delivery_tab(ctx: dict) -> None:
     with col1:
         render_rate_ranking(
             livreurs_ui, "livreur", "taux_livraison_total", "livrees", "commandes_envoyees",
-            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_sent, "Taux livr\u00e9", "", True, "rank_livreur_livre",
+            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_sent, "Taux livr\u00e9 (sur exp\u00e9di\u00e9es)", "", True, "rank_livreur_livre",
         )
     with col2:
+        # Delivered / (delivered + returned): parcels still on the road are left out.
+        livreurs_finished = livreurs_ui.assign(colis_termines=livreurs_ui["livrees"] + livreurs_ui["retours"])
         render_rate_ranking(
-            livreurs_ui, "livreur", "taux_retour", "retours", "commandes_envoyees",
-            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_sent, "Taux retour", "", False, "rank_livreur_retour",
+            livreurs_finished, "livreur", "taux_livraison_finalisees", "livrees", "colis_termines",
+            "colis_termines", "colis termin\u00e9s", volume_sent, "Taux livr\u00e9 (sur colis termin\u00e9s)", "", True, "rank_livreur_livre_termines",
         )
 
-    cockpit_heading("Performance detaillee", "Livraison, retours et CA par livreur.")
-    livreur_cols = ["livreur", "fiabilite_volume", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_bloque_livraison", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre"]
-    event, livreurs_view = render_selectable_data_table(livreurs_ui, livreur_cols, "livreur_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
-    idx = selected_index(event)
-    if idx is not None and idx < len(livreurs_view):
-        row = livreurs_view.iloc[idx]
-        show_drilldown(df, "livreur", "Livreur", row["livreur"], "Retours / echecs", "livreur")
+    with st.expander("📋 Voir le détail par livreur (tableau)", expanded=False):
+        st.caption("Livraison, retours et CA par livreur.")
+        livreur_cols = ["livreur", "fiabilite_volume", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_bloque_livraison", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre"]
+        event, livreurs_view = render_selectable_data_table(livreurs_ui, livreur_cols, "livreur_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
+        idx = selected_index(event)
+        if idx is not None and idx < len(livreurs_view):
+            row = livreurs_view.iloc[idx]
+            show_drilldown(df, "livreur", "Livreur", row["livreur"], "Retours / echecs", "livreur")
 
-    cockpit_heading("Wilaya x livreur", "Lecture croisee pour isoler les zones faibles.")
-    wilaya_livreur_cols = ["livreur", "wilaya", "fiabilite_volume", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre", "lecture_rapide"]
-    render_data_table(wilaya_livreur_detail, wilaya_livreur_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["wilaya", "commandes_envoyees"])
+    with st.expander("📋 Voir le détail livreur × wilaya (tableau)", expanded=False):
+        st.caption("Lecture croisee pour isoler les zones faibles.")
+        wilaya_livreur_cols = ["livreur", "wilaya", "fiabilite_volume", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre", "lecture_rapide"]
+        render_data_table(wilaya_livreur_detail, wilaya_livreur_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["wilaya", "commandes_envoyees"])
 
     with st.expander("Comparaison livreurs par wilaya", expanded=False):
         compare_cols = ["wilaya", "livreur_dominant", "expediees_dominant", "taux_livraison_dominant", "taux_retour_dominant", "livreur_alternatif", "expediees_alternatif", "taux_livraison_alternatif", "taux_retour_alternatif", "ecart_livraison", "ecart_retour", "fiabilite_comparaison", "lecture_rapide"]
@@ -175,17 +181,19 @@ def render_products_tab(ctx: dict) -> None:
         ("Transformation reelle", pct(weighted_rate(products, "livrees", "commandes_recues")), "livrees / recues", tone_class(weighted_rate(products, "livrees", "commandes_recues"), "transformation", thresholds)),
     ])
 
-    cockpit_heading("Performance detaillee", "Produit par produit, avec CA livre et pertes retours.")
-    product_cols = ["produit", "fiabilite_volume", "decision_auto", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "retours", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "ca_bloque_livraison", "panier_moyen_livre"]
-    event, products_view = render_selectable_data_table(products_ui, product_cols, "product_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="ca_livre")
-    idx = selected_index(event)
-    if idx is not None and idx < len(products_view):
-        row = products_view.iloc[idx]
-        show_drilldown(df, "produit", "Nom produit", row["produit"], "Retours / echecs", "produit")
+    with st.expander("📋 Voir le détail par produit (tableau)", expanded=False):
+        st.caption("Produit par produit, avec CA livre et pertes retours.")
+        product_cols = ["produit", "fiabilite_volume", "decision_auto", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "retours", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "ca_bloque_livraison", "panier_moyen_livre"]
+        event, products_view = render_selectable_data_table(products_ui, product_cols, "product_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="ca_livre")
+        idx = selected_index(event)
+        if idx is not None and idx < len(products_view):
+            row = products_view.iloc[idx]
+            show_drilldown(df, "produit", "Nom produit", row["produit"], "Retours / echecs", "produit")
 
-    cockpit_heading("Produit x Wilaya", "Segments prioritaires par zone.")
-    product_wilaya_cols = ["produit", "wilaya", "fiabilite_volume", "commandes_recues", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_transformation_reel", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "livreur_dominant", "lecture_rapide"]
-    render_data_table(product_wilaya_detail, product_wilaya_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["ca_livre", "ca_retours"])
+    with st.expander("📋 Voir le détail produit × wilaya (tableau)", expanded=False):
+        st.caption("Segments prioritaires par zone.")
+        product_wilaya_cols = ["produit", "wilaya", "fiabilite_volume", "commandes_recues", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_transformation_reel", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "livreur_dominant", "lecture_rapide"]
+        render_data_table(product_wilaya_detail, product_wilaya_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["ca_livre", "ca_retours"])
 
     with st.expander("Produit x Livreur", expanded=False):
         product_livreur_cols = ["produit", "livreur", "fiabilite_volume", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre", "lecture_rapide"]

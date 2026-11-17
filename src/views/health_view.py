@@ -4,7 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ..health import BAD, GOOD, WARN, health_summary, reference_date, stuck_orders, vital_signs
+from ..health import BAD, GOOD, WARN, average_delivery_days, health_summary, reference_date, stuck_orders, vital_signs
 from .formatting import format_count, format_date, html_text, pct
 
 VERDICT_STYLE = {
@@ -37,7 +37,7 @@ def vital_sign_html(sign: dict) -> str:
     sign_text = "≥" if sign["higher_is_better"] else "≤"
     sentence = sign["explanation"].format(n=f"{round(value * 100)}" if value is not None and not pd.isna(value) else "—")
     return (
-        '<div style="flex:1;min-width:220px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;padding:12px 14px">'
+        f'<div style="{CARD_STYLE}">'
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
         f'<span style="font-size:14px;font-weight:800;color:#0f172a">{html_text(sign["label"])}</span>'
         f'<span style="background:{pill_bg};color:{pill_fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{label}</span></div>'
@@ -52,20 +52,40 @@ def vital_sign_html(sign: dict) -> str:
     )
 
 
-def render_health_section(metrics: dict, thresholds: dict[str, float]) -> None:
+def delivery_time_html(delay: dict) -> str:
+    """Average shipping -> delivery time, shown next to the gauges (no objective)."""
+    days = delay.get("days")
+    value = "\u2014" if days is None else f"{days:.1f} jours".replace(".", ",")
+    note = f"Entre l'exp\u00e9dition et la livraison, en moyenne sur {format_count(delay.get('orders', 0))} colis livr\u00e9s"
+    if delay.get("without_dates"):
+        note += f" ({format_count(delay['without_dates'])} sans dates exploitables)"
+    return (
+        f'<div style="{CARD_STYLE}">'
+        '<div style="font-size:14px;font-weight:800;color:#0f172a">\U0001f69a D\u00e9lai moyen de livraison</div>'
+        f'<div style="font-size:28px;font-weight:850;color:#0f172a;margin-top:4px;line-height:1.1">{html_text(value)}</div>'
+        f'<div style="font-size:12.5px;color:#475569;margin-top:2px">{html_text(note)}</div>'
+        "</div>"
+    )
+
+
+def render_health_section(metrics: dict, thresholds: dict[str, float], df: pd.DataFrame | None = None) -> None:
     try:
         signs = vital_signs(metrics, thresholds)
         summary = health_summary(signs)
+        delay_card = delivery_time_html(average_delivery_days(df)) if df is not None else ""
         st.markdown(
             '<div class="section-tight">\U0001fa7a Santé de mon business</div>'
-            '<div class="section-subtitle">Tes 4 taux vitaux. Le trait noir = ton objectif (réglable dans la barre latérale, rubrique Seuils).</div>'
+            '<div class="section-subtitle">Tes taux vitaux. Le trait noir = ton objectif (réglable dans la barre latérale, rubrique Seuils).</div>'
             f'<div style="font-size:15px;font-weight:800;color:#0f172a;margin:2px 0 8px">{html_text(overall_text(summary))}</div>'
-            f'<div style="display:flex;gap:12px;flex-wrap:wrap">{"".join(vital_sign_html(s) for s in signs)}</div>',
+            f'<div style="display:flex;gap:12px;flex-wrap:wrap">{"".join(vital_sign_html(s) for s in signs)}{delay_card}</div>',
             unsafe_allow_html=True,
         )
     except Exception as exc:  # never let the new section break the dashboard
         st.warning(f"Section santé indisponible pour ce fichier : {exc}")
 
+
+# Three cards per row on a computer screen.
+CARD_STYLE = "flex:1 1 30%;min-width:240px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;padding:12px 14px"
 
 STEP_ICONS = {"confirmation": "\U0001f4de", "preparation": "\U0001f4e6", "delivery": "\U0001f69a"}
 

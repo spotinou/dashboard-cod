@@ -58,12 +58,12 @@ def test_verdict_levels():
 def test_health_summary_and_text():
     signs = vital_signs(compute_global_metrics(build_df()), DEFAULT_THRESHOLDS)
     summary = health_summary(signs)
-    assert sum(summary["counts"].values()) == 4
+    assert sum(summary["counts"].values()) == 5
     assert summary["overall"] in {GOOD, WARN, BAD}
     text = overall_text(summary)
     for sign in summary["to_watch"]:
         assert sign["label"] in text
-    good = health_summary([{"verdict": GOOD, "label": "x"}] * 4)
+    good = health_summary([{"verdict": GOOD, "label": "x"}] * 5)
     assert overall_text(good).startswith("🟢 Tout va bien")
 
 
@@ -119,3 +119,38 @@ def test_confirmation_rate_is_exactly_the_card_value():
     for df in [build_df()]:
         m = compute_global_metrics(df)
         assert card_confirmation_rate(m) == displayed_reception_rates(m, None)[0]
+
+
+def test_average_delivery_days():
+    from src.health import average_delivery_days
+
+    # F: shipped Jan 11, delivered Jan 15 -> 4 days (the only delivered order)
+    delay = average_delivery_days(build_df())
+    assert delay == {"days": 4.0, "orders": 1, "without_dates": 0}
+    assert average_delivery_days(build_df().iloc[0:0])["days"] is None
+
+
+def test_finished_parcels_delivery_rate_matches_global_figure():
+    from src.metrics import compute_livreur_metrics
+    from src.rankings import pooled_rate
+
+    df = build_df()
+    metrics = compute_global_metrics(df)
+    signs = {s["key"]: s for s in vital_signs(metrics, DEFAULT_THRESHOLDS)}
+    # F delivered, H returned -> 1 / 2
+    assert signs["delivery_finalized"]["value"] == metrics["delivery_finalized_rate"] == 0.5
+    livreurs = compute_livreur_metrics(df)
+    finished = livreurs.assign(colis_termines=livreurs["livrees"] + livreurs["retours"])
+    assert pooled_rate(finished, "livrees", "colis_termines") == pytest.approx(metrics["delivery_finalized_rate"])
+
+
+def test_confirmation_is_stuck_after_three_days():
+    from src.health import STUCK_LIMIT_DAYS
+
+    assert STUCK_LIMIT_DAYS == {"confirmation": 3, "preparation": 2, "delivery": 7}
+    df = build_df()
+    steps = {s["key"]: s for s in stuck_orders(df, pd.Timestamp("2026-01-04"))}
+    # A created Jan 1 -> 3 days on Jan 4: not stuck yet (limit is "more than 3 days")
+    assert steps["confirmation"]["late"] == 0
+    steps = {s["key"]: s for s in stuck_orders(df, pd.Timestamp("2026-01-05"))}
+    assert steps["confirmation"]["late"] == 1

@@ -60,6 +60,9 @@ PERIOD_PRESET_OPTIONS = (
 )
 
 
+# Period shown when a file is opened (the owner checks the last 30 days by default).
+DEFAULT_PERIOD_PRESET = "30 derniers jours"
+
 PERIOD_PRESET_DAYS = {
     "7 derniers jours": 7,
     "14 derniers jours": 14,
@@ -177,9 +180,10 @@ def initialize_analysis_period_selector(state, file_signature, min_date, max_dat
         return (None, None), None
 
     is_new_file = state.get(ANALYSIS_PERIOD_FILE_KEY) != file_signature
-    candidate = (min_date, max_date) if is_new_file else state.get(ANALYSIS_PERIOD_VALUE_KEY)
+    default_period = period_from_preset(DEFAULT_PERIOD_PRESET, min_date, max_date)
+    candidate = default_period if is_new_file else state.get(ANALYSIS_PERIOD_VALUE_KEY)
     if candidate is None:
-        candidate = (min_date, max_date)
+        candidate = default_period
     normalized, message = normalize_analysis_period(candidate, min_date, max_date)
 
     state[ANALYSIS_PERIOD_FILE_KEY] = file_signature
@@ -187,7 +191,7 @@ def initialize_analysis_period_selector(state, file_signature, min_date, max_dat
     if is_new_file or ANALYSIS_PERIOD_DRAFT_KEY not in state:
         state[ANALYSIS_PERIOD_DRAFT_KEY] = normalized
     if is_new_file or ANALYSIS_PERIOD_PRESET_KEY not in state:
-        state[ANALYSIS_PERIOD_PRESET_KEY] = "Toute la p\u00e9riode"
+        state[ANALYSIS_PERIOD_PRESET_KEY] = DEFAULT_PERIOD_PRESET
     if is_new_file:
         state.pop(ANALYSIS_PERIOD_NOTICE_KEY, None)
     return normalized, message

@@ -145,11 +145,11 @@ RELATIVE_NOISE = 0.02  # 2 %
 COMPARISON_METRICS = [
     ("orders_received", "Commandes reçues", "count", True),
     ("confirmation_display_rate", "Taux confirmé", "rate", True),
-    ("delivery_total_rate_on_sent", "Taux livré", "rate", True),
-    ("return_rate_on_sent", "Taux retour", "rate", False),
+    ("delivery_total_rate_on_sent", "Taux livré (sur expédiées)", "rate", True),
+    ("delivery_finalized_rate", "Taux livré (sur colis terminés)", "rate", True),
 ]
 # Indicators that keep moving while parcels are still on the road.
-DELIVERY_DEPENDENT = {"delivery_total_rate_on_sent", "return_rate_on_sent"}
+DELIVERY_DEPENDENT = {"delivery_total_rate_on_sent", "delivery_finalized_rate", "return_rate_on_sent"}
 
 
 def in_transit_share(metrics: dict) -> float | None:
@@ -234,10 +234,10 @@ def compute_period_comparison(current: dict, previous: dict | None) -> list[dict
 
 # key, title, explanation, kind, higher_is_better, chart form, depends on delivery outcome
 TREND_CHARTS = [
-    ("commandes_recues", "Commandes reçues", "", "count", True, "bar", False),
     ("taux_confirmation", "Taux confirmé", "", "rate", True, "line", False),
-    ("taux_livraison_total", "Taux livré", "", "rate", True, "line", True),
-    ("taux_retour", "Taux retour", "", "rate", False, "line", True),
+    ("taux_livraison_total", "Taux livré (sur expédiées)", "", "rate", True, "line", True),
+    ("taux_livraison_finalisees", "Taux livré (sur colis terminés)", "", "rate", True, "line", True),
+    ("commandes_recues", "Commandes reçues", "", "count", True, "bar", False),
 ]
 
 # Rates are averaged as total numerator / total denominator (not a mean of daily rates),

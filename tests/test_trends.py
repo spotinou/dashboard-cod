@@ -124,14 +124,15 @@ def test_period_comparison_deltas_and_tones():
     assert rows["confirmation_display_rate"]["tone"] == "good"
     # Return rate 0 % vs 50 % -> going down, but 1 of the 3 parcels (33 %) is still
     # on the road: the delivery figures are provisional and not judged
-    assert rows["return_rate_on_sent"]["direction"] == "down"
-    assert rows["return_rate_on_sent"]["provisional"] is True
-    assert rows["return_rate_on_sent"]["tone"] == "neutral"
-    assert rows["return_rate_on_sent"]["in_transit_share"] == pytest.approx(1 / 3)
+    # Taux livré on finished parcels: 100 % vs 50 % -> up, but provisional (not judged)
+    assert rows["delivery_finalized_rate"]["direction"] == "up"
+    assert rows["delivery_finalized_rate"]["provisional"] is True
+    assert rows["delivery_finalized_rate"]["tone"] == "neutral"
+    assert rows["delivery_finalized_rate"]["in_transit_share"] == pytest.approx(1 / 3)
     assert rows["delivery_total_rate_on_sent"]["provisional"] is True
     assert rows["confirmation_display_rate"]["provisional"] is False
     assert [r["key"] for r in compute_period_comparison(current, previous)] == [
-        "orders_received", "confirmation_display_rate", "delivery_total_rate_on_sent", "return_rate_on_sent",
+        "orders_received", "confirmation_display_rate", "delivery_total_rate_on_sent", "delivery_finalized_rate",
     ]
 
 
@@ -147,7 +148,8 @@ def test_period_comparison_judges_delivery_once_parcels_are_back():
     assert rows["delivery_total_rate_on_sent"]["delta"] == pytest.approx(0.5)
     assert rows["delivery_total_rate_on_sent"]["provisional"] is False
     assert rows["delivery_total_rate_on_sent"]["tone"] == "good"
-    assert rows["return_rate_on_sent"]["tone"] == "good"
+    assert rows["delivery_finalized_rate"]["value"] == pytest.approx(current["delivery_finalized_rate"])
+    assert rows["delivery_finalized_rate"]["tone"] == "good"
 
 
 def test_period_comparison_without_previous_data():
@@ -254,6 +256,7 @@ def test_trend_taux_livre_matches_the_card():
     df = build_df()
     trend = compute_trend(df, "Crée le", "Jour")
     metrics = compute_global_metrics(df)
-    assert [spec[0] for spec in TREND_CHARTS] == ["commandes_recues", "taux_confirmation", "taux_livraison_total", "taux_retour"]
+    assert [spec[0] for spec in TREND_CHARTS] == ["taux_confirmation", "taux_livraison_total", "taux_livraison_finalisees", "commandes_recues"]
+    assert trend_average(trend, "taux_livraison_finalisees") == pytest.approx(metrics["delivery_finalized_rate"])
     assert trend_average(trend, "taux_livraison_total") == pytest.approx(metrics["delivery_total_rate_on_sent"])
     assert trend_average(trend, "taux_retour") == pytest.approx(metrics["return_rate_on_sent"])

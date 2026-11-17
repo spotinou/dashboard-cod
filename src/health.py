@@ -16,13 +16,14 @@ GOOD, WARN, BAD, UNKNOWN = "good", "warn", "bad", "neutral"
 # key, label, plain sentence ({n} = value per 100), higher_is_better, threshold keys (objective, alert)
 VITAL_SIGNS = [
     ("confirmation", "Taux confirmé", "Sur 100 commandes reçues, {n} sont confirmées", True, ("confirmation_green", "confirmation_orange")),
-    ("delivery", "Taux livré", "Sur 100 colis expédiés, {n} sont livrés", True, ("delivery_green", "delivery_orange")),
+    ("delivery", "Taux livré (sur expédiées)", "Sur 100 colis expédiés, {n} sont livrés", True, ("delivery_green", "delivery_orange")),
+    ("delivery_finalized", "Taux livré (sur colis terminés)", "Sur 100 colis arrivés au bout (livrés ou revenus), {n} sont livrés", True, ("delivery_green", "delivery_orange")),
     ("return", "Taux retour", "Sur 100 colis expédiés, {n} reviennent", False, ("return_orange", "return_red")),
     ("cancellation", "Taux annulé", "Sur 100 commandes reçues, {n} sont annulées", False, ("cancellation_orange", "cancellation_red")),
 ]
 
 # Days after which an order waiting at a step is considered stuck.
-STUCK_LIMIT_DAYS = {"confirmation": 2, "preparation": 2, "delivery": 7}
+STUCK_LIMIT_DAYS = {"confirmation": 3, "preparation": 2, "delivery": 7}
 
 
 def vital_rate(metrics: dict, key: str) -> float | None:
@@ -30,6 +31,7 @@ def vital_rate(metrics: dict, key: str) -> float | None:
         return card_confirmation_rate(metrics)
     return {
         "delivery": metrics.get("delivery_total_rate_on_sent"),
+        "delivery_finalized": metrics.get("delivery_finalized_rate"),
         "return": metrics.get("return_rate_on_sent"),
         "cancellation": metrics.get("cancellation_rate"),
     }[key]
@@ -139,3 +141,30 @@ def stuck_orders(df: pd.DataFrame, today, limits: dict[str, int] | None = None) 
             }
         )
     return steps
+
+
+# ---------------------------------------------------------------------------
+# Average delivery time
+# ---------------------------------------------------------------------------
+
+
+def average_delivery_days(df: pd.DataFrame) -> dict:
+    """Average number of days between shipping and delivery, over delivered orders.
+
+    Delivery date = "Livrée le", or "Encaissée le" when the delivery date is missing.
+    Orders without both dates (or with a delivery before shipping) are left out and counted."""
+    result = {"days": None, "orders": 0, "without_dates": 0}
+    if df.empty or "order_id" not in df.columns or "is_delivered" not in df.columns:
+        return result
+    cols = [c for c in ["is_delivered", "Expédiée le", "Livrée le", "Encaissée le"] if c in df.columns]
+    agg = {c: ("max" if c == "is_delivered" else "first") for c in cols}
+    orders = df.groupby("order_id", dropna=False).agg(agg)
+    delivered = orders[orders["is_delivered"].fillna(False).astype(bool)]
+    if delivered.empty:
+        return result
+    shipped = _first_date(delivered, ["Expédiée le"])
+    arrived = _first_date(delivered, ["Livrée le", "Encaissée le"])
+    days = (arrived.dt.normalize() - shipped.dt.normalize()).dt.days
+    valid = days[days.notna() & days.ge(0)]
+    result.update({"days": float(valid.mean()) if not valid.empty else None, "orders": int(len(valid)), "without_dates": int(len(delivered) - len(valid))})
+    return result
