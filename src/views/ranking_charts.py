@@ -104,10 +104,13 @@ def render_rate_ranking(
     explanation: str,
     higher_is_better: bool,
     key: str,
+    average=None,
 ) -> None:
     """Ranking of a rate: best and worst visible, volume next to each value, company average as reference."""
     try:
-        average = pooled_rate(table, numerator_col, denominator_col)
+        # The reference is the team / company rate; a caller can pass the exact KPI card value.
+        if average is None:
+            average = pooled_rate(table, numerator_col, denominator_col)
         rows, hidden_low, hidden_middle = rate_ranking_rows(table, label_col, rate_col, volume_col, volume_min, higher_is_better)
         better = "plus haut = mieux" if higher_is_better else "plus bas = mieux"
         legend = (
