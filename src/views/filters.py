@@ -422,6 +422,7 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
     st.sidebar.header("Seuils")
     volume_product = st.sidebar.number_input("Volume min produit", 1, 1000, int(DEFAULT_THRESHOLDS["volume_product"]))
     volume_sent = st.sidebar.number_input("Volume min wilaya/livreur", 1, 1000, int(DEFAULT_THRESHOLDS["volume_sent"]))
+    ad_cost = st.sidebar.number_input("Co\u00fbt par achat Meta Ads (\u20ac)", 0.0, 1000.0, 0.0, 0.1, help="Facultatif : pour afficher ton vrai co\u00fbt d'acquisition client.")
     thresholds = {
         **DEFAULT_THRESHOLDS,
         "volume_product": volume_product,
@@ -439,6 +440,7 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
         "preparation_orange": st.sidebar.slider("Preparation orange > ", 0.0, 1.0, DEFAULT_THRESHOLDS["preparation_orange"], 0.01),
         "preparation_red": st.sidebar.slider("Preparation rouge > ", 0.0, 1.0, DEFAULT_THRESHOLDS["preparation_red"], 0.01),
     }
+    thresholds["ad_cost_per_purchase"] = float(ad_cost)
     # Alert level for the transformation rates: 5 points under the objective.
     thresholds["transformation_orange"] = max(thresholds["transformation_green"] - 0.05, 0.0)
     thresholds["net_transformation_orange"] = max(thresholds["net_transformation_green"] - 0.05, 0.0)
