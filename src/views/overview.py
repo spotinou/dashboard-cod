@@ -4,8 +4,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ..trends import net_transformation_rate
-from .formatting import html_text, money, pct, safe_ratio, tone_class, top_known
+from ..trends import cac_multiplier, net_transformation_rate
+from .formatting import format_count, help_icon, html_text, money, pct, safe_ratio, tone_class, top_known
 from .components import cockpit_heading, hero_card, mini_card, render_data_table, render_kpi_stack, render_priority_focus, render_section_kpis, render_stage_kpis
 from .analysis import amount_totals
 
@@ -190,7 +190,58 @@ def render_owner_journey(metrics: dict, thresholds: dict[str, float]) -> None:
     journey = owner_kpi_sections(metrics, thresholds)
     render_stage_kpis("1. Reception", "Ce qui entre dans le funnel et ce qui en sort avant expedition.", journey[:4])
     render_stage_kpis("2. Execution", "Les commandes confirmees progressent vers une livraison finalisee.", journey[4:7])
-    render_stage_kpis("3. Resultat", "Sur 100 commandes reçues, combien finissent livrées (brute : toutes les reçues ; nette : hors annulées).", journey[7:])
+    st.markdown(
+        '<div class="stage-heading"><span>3. Resultat</span><small>Sur 100 commandes reçues, combien finissent livrées, et ce que ça coûte en pub.</small></div>',
+        unsafe_allow_html=True,
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(big_rate_card_html(journey[7], thresholds.get("transformation_green")), unsafe_allow_html=True)
+    with col2:
+        st.markdown(cac_multiplier_card_html(cac_multiplier(metrics), thresholds.get("ad_cost_per_purchase", 0.0)), unsafe_allow_html=True)
+    cols = st.columns(4)
+    for col, (label, value, note, tone) in zip(cols, journey[8:]):
+        with col:
+            mini_card(label, str(value), note, tone=tone)
+
+
+BIG_TONES = {"good": ("#16a34a", "#f0fdf4"), "warn": ("#f59e0b", "#fffbeb"), "bad": ("#dc2626", "#fff1f2"), "neutral": ("#2563eb", "#ffffff")}
+
+
+def big_rate_card_html(card: tuple, objective: float | None = None) -> str:
+    """The gross transformation rate, shown bigger: it is the key result."""
+    title, value, note, tone = card
+    border, background = BIG_TONES.get(tone, BIG_TONES["neutral"])
+    objective_text = f" \u00b7 objectif \u2265 {html_text(pct(objective))}" if objective is not None else ""
+    return (
+        f'<div style="border:1px solid #e2e8f0;border-left:6px solid {border};background:{background};border-radius:10px;padding:14px 18px;min-height:150px">'
+        f'<div style="font-size:15px;font-weight:850;color:#0f172a">\u2b50 {html_text(title)}{help_icon(title)}</div>'
+        f'<div style="font-size:44px;font-weight:850;color:#0f172a;line-height:1.1;margin-top:6px">{html_text(value)}</div>'
+        f'<div style="font-size:13px;color:#475569;margin-top:4px">{html_text(note)}{objective_text}</div></div>'
+    )
+
+
+def format_factor(value) -> str:
+    return "\u2014" if value is None else f"\u00d7 {value:.2f}".replace(".", ",")
+
+
+def cac_multiplier_card_html(mult: dict, ad_cost: float = 0.0) -> str:
+    """How many ad purchases it takes to get one delivered customer."""
+    real, estimated = mult.get("real"), mult.get("estimated")
+    lines = f"{format_count(mult['received'])} re\u00e7ues \u00f7 {format_count(mult['delivered'])} livr\u00e9es"
+    if estimated is not None:
+        lines += f"<br>Estim\u00e9 une fois tous les colis arriv\u00e9s : <b>{html_text(format_factor(estimated))}</b>"
+    if ad_cost and real is not None:
+        cost = f"{ad_cost * real:.2f} \u20ac".replace(".", ",")
+        lines += f"<br>Ton vrai co\u00fbt par client livr\u00e9 : <b>{html_text(cost)}</b> ({html_text(f'{ad_cost:.2f}'.replace('.', ','))} \u20ac \u00d7 {html_text(format_factor(real)[2:])})"
+    tip = ("Combien d'achats Meta il faut pour 1 client livr\u00e9. Multiplie ton co\u00fbt par achat Meta par ce chiffre "
+           "pour avoir ton vrai co\u00fbt d'acquisition. Calcul : re\u00e7ues \u00f7 livr\u00e9es (= 1 \u00f7 transformation brute).")
+    return (
+        '<div style="border:1px solid #e2e8f0;border-left:6px solid #7c3aed;background:#faf5ff;border-radius:10px;padding:14px 18px;min-height:150px">'
+        f'<div style="font-size:15px;font-weight:850;color:#0f172a">\U0001f4b8 Multiplicateur co\u00fbt d\u2019acquisition<span class="help-tip" data-tip="{html_text(tip)}">\u24d8</span></div>'
+        f'<div style="font-size:44px;font-weight:850;color:#0f172a;line-height:1.1;margin-top:6px">{html_text(format_factor(real))}</div>'
+        f'<div style="font-size:13px;color:#475569;margin-top:4px">{lines}</div></div>'
+    )
 
 
 def render_owner_money(df: pd.DataFrame, metrics: dict) -> None:

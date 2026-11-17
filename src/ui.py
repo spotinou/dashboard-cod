@@ -179,8 +179,12 @@ from .views.analysis import (  # noqa: F401
     wilaya_summary,
 )
 from .views.overview import (  # noqa: F401
+    BIG_TONES,
+    big_rate_card_html,
+    cac_multiplier_card_html,
     confirmation_funnel_counts,
     displayed_reception_rates,
+    format_factor,
     owner_kpi_sections,
     owner_money_sections,
     owner_priority,

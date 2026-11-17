@@ -266,3 +266,22 @@ def test_trend_taux_livre_matches_the_card():
     assert trend_average(trend, "taux_livraison_finalisees") == pytest.approx(metrics["delivery_finalized_rate"])
     assert trend_average(trend, "taux_livraison_total") == pytest.approx(metrics["delivery_total_rate_on_sent"])
     assert trend_average(trend, "taux_retour") == pytest.approx(metrics["return_rate_on_sent"])
+
+
+def test_cac_multiplier_owner_example():
+    from src.trends import cac_multiplier
+    from src.ui import cac_multiplier_card_html
+
+    # 100 received, 25 cancelled -> 75 confirmed; 50 delivered, 25 returned -> x 2
+    metrics = {"orders_received": 100, "orders_cancelled": 25, "orders_in_confirmation": 0, "orders_delivered": 50,
+               "delivery_finalized_rate": 50 / 75}
+    mult = cac_multiplier(metrics)
+    assert mult["real"] == pytest.approx(2.0)
+    assert mult["estimated"] == pytest.approx(2.0)  # 1 / (75 % x 66.7 %)
+    html = cac_multiplier_card_html(mult, ad_cost=1.0)
+    assert "× 2,00" in html and "2,00 €" in html
+    assert cac_multiplier({"orders_received": 10, "orders_delivered": 0})["real"] is None
+    # real factor = 1 / taux de transformation brute
+    df = build_df()
+    m = compute_global_metrics(df)
+    assert cac_multiplier(m)["real"] == pytest.approx(1 / m["transformation_real_rate"])

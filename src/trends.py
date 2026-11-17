@@ -315,3 +315,22 @@ def trend_reading(trend: pd.DataFrame, key: str, kind: str, higher_is_better: bo
         reading["direction"] = "up" if gap > 0 else "down"
         reading["tone"] = "good" if (gap > 0) == higher_is_better else "bad"
     return reading
+
+
+def cac_multiplier(metrics: dict) -> dict:
+    """Factor to apply to the ad cost per purchase to get the real cost per delivered customer.
+
+    real  = received / delivered (inverse of the gross transformation rate);
+    estimated = 1 / (taux confirmé x taux livré sur colis terminés): what the real
+    factor should become once every parcel still on the road is delivered or returned."""
+    received = float(metrics.get("orders_received", 0) or 0)
+    delivered = float(metrics.get("orders_delivered", 0) or 0)
+    confirmed = card_confirmation_rate(metrics)
+    finalized = metrics.get("delivery_finalized_rate")
+    expected = confirmed * finalized if confirmed and finalized else None
+    return {
+        "real": safe_divide(received, delivered),
+        "estimated": safe_divide(1.0, expected) if expected else None,
+        "received": int(received),
+        "delivered": int(delivered),
+    }
