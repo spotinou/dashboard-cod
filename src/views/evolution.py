@@ -222,29 +222,30 @@ def render_metric_trend(trend: pd.DataFrame, spec: tuple, granularity: str, thre
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key=f"trend_{key}")
 
 
-def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context: dict, global_metrics: dict, thresholds: dict[str, float]) -> None:
+def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context: dict, global_metrics: dict, thresholds: dict[str, float], show_comparison: bool = True) -> None:
     """Evolution over time + comparison with the previous period. Purely additive: never alters existing KPIs."""
     try:
-        prev_df, window = previous_period_frame(loaded_df, date_context)
-        window_text = f" ({format_date(window[0])} → {format_date(window[1])})" if window else ""
-        cockpit_heading(
-            "Comparaison avec la période précédente",
-            f"M\u00eame dur\u00e9e juste avant{window_text}. Vert = mieux qu'avant, rouge = moins bien.",
-        )
-        if window is None:
-            st.caption("Comparaison indisponible : aucune période d'analyse définie.")
-        elif prev_df is None:
-            first = first_available_date(loaded_df, date_context)
-            if first is not None and window[0] < first:
-                st.info(
-                    f"Comparaison non affichée : ton fichier commence le {format_date(first)}, la période précédente "
-                    "ne serait couverte qu'en partie et les écarts seraient faux. Choisis une période plus courte (ex. 30 derniers jours)."
-                )
+        prev_df, window = previous_period_frame(loaded_df, date_context) if show_comparison else (None, None)
+        if show_comparison:
+            window_text = f" ({format_date(window[0])} → {format_date(window[1])})" if window else ""
+            cockpit_heading(
+                "Comparaison avec la période précédente",
+                f"M\u00eame dur\u00e9e juste avant{window_text}. Vert = mieux qu'avant, rouge = moins bien.",
+            )
+            if window is None:
+                st.caption("Comparaison indisponible : aucune période d'analyse définie.")
+            elif prev_df is None:
+                first = first_available_date(loaded_df, date_context)
+                if first is not None and window[0] < first:
+                    st.info(
+                        f"Comparaison non affichée : ton fichier commence le {format_date(first)}, la période précédente "
+                        "ne serait couverte qu'en partie et les écarts seraient faux. Choisis une période plus courte (ex. 30 derniers jours)."
+                    )
+                else:
+                    st.caption("Aucune commande sur la période précédente.")
             else:
-                st.caption("Aucune commande sur la période précédente.")
-        else:
-            rows = compute_period_comparison(global_metrics, compute_global_metrics(prev_df))
-            render_section_kpis(comparison_cards(rows, window), max_per_row=6)
+                rows = compute_period_comparison(global_metrics, compute_global_metrics(prev_df))
+                render_section_kpis(comparison_cards(rows, window), max_per_row=6)
 
         granularity = auto_granularity(date_context.get("start_date"), date_context.get("end_date"))
         unit = {"Jour": "jour", "Semaine": "semaine", "Mois": "mois"}[granularity]

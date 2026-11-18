@@ -208,7 +208,7 @@ def render_owner_journey(metrics: dict, thresholds: dict[str, float]) -> None:
 BIG_TONES = {"good": ("#16a34a", "#f0fdf4"), "warn": ("#f59e0b", "#fffbeb"), "bad": ("#dc2626", "#fff1f2"), "neutral": ("#2563eb", "#ffffff")}
 
 
-def big_rate_card_html(card: tuple, objective: float | None = None) -> str:
+def big_rate_card_html(card: tuple, objective: float | None = None, extra_html: str = "") -> str:
     """The gross transformation rate, shown bigger: it is the key result."""
     title, value, note, tone = card
     border, background = BIG_TONES.get(tone, BIG_TONES["neutral"])
@@ -217,7 +217,7 @@ def big_rate_card_html(card: tuple, objective: float | None = None) -> str:
         f'<div style="border:1px solid #e2e8f0;border-left:6px solid {border};background:{background};border-radius:10px;padding:14px 18px;min-height:150px">'
         f'<div style="font-size:15px;font-weight:850;color:#0f172a">\u2b50 {html_text(title)}{help_icon(title)}</div>'
         f'<div style="font-size:44px;font-weight:850;color:#0f172a;line-height:1.1;margin-top:6px">{html_text(value)}</div>'
-        f'<div style="font-size:13px;color:#475569;margin-top:4px">{html_text(note)}{objective_text}</div></div>'
+        f'<div style="font-size:13px;color:#475569;margin-top:4px">{html_text(note)}{objective_text}</div>{extra_html}</div>'
     )
 
 
