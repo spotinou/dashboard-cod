@@ -174,3 +174,13 @@ def test_transformation_rates():
     rates = group_card_rates(df, "Affectée à", "confirmatrice")
     assert pooled_rate(rates, "livrees", "commandes_recues") == pytest.approx(metrics["transformation_real_rate"])
     assert pooled_rate(rates, "livrees", "commandes_confirmees_nettes") == pytest.approx(net_transformation_rate(metrics))
+
+
+def test_mobile_stuck_summary_card():
+    from src.views.mobile_view import stuck_summary_card
+
+    df = build_df()
+    title, value, note, tone = stuck_summary_card(df, df)
+    # A (confirmation), C (préparation), D (livraison) are stuck on Jan 15
+    assert (title, value, tone) == ("Commandes bloquées", "3", "bad")
+    assert "1 en attente de confirmation (> 3 j)" in note

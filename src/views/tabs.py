@@ -10,6 +10,7 @@ from .analysis import build_export, confirmation_summary, delivery_summary, prod
 from ..rankings import group_card_rates
 from ..trends import net_transformation_rate
 from .overview import confirmation_funnel_counts, displayed_reception_rates, render_owner_journey, render_owner_money
+from .mobile_view import render_mobile_summary
 from .health_view import render_health_section, render_stuck_orders_section
 from .evolution import render_trend_section
 from .ranking_charts import render_amount_ranking, render_rate_ranking
@@ -28,6 +29,10 @@ def render_global_tab(ctx: dict) -> None:
     render_quality_badge(validation_checks)
     render_date_context(date_context)
     render_active_filters_banner(date_context)
+    if thresholds.get("mobile_view"):
+        render_mobile_summary(df, loaded_df, global_metrics, thresholds)
+        if not st.checkbox("Afficher tout le d\u00e9tail", value=False, key="mobile_show_all"):
+            return
     # Morning / evening check, most important first; money comes last.
     render_owner_journey(global_metrics, thresholds)
     render_order_status_section(global_metrics)

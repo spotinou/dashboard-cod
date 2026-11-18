@@ -263,3 +263,8 @@ from .views.health_view import (  # noqa: F401
     stuck_orders_table,
     vital_sign_html,
 )
+from .views.mobile_view import (  # noqa: F401
+    MOBILE_CARDS,
+    render_mobile_summary,
+    stuck_summary_card,
+)
