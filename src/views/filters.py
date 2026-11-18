@@ -375,6 +375,7 @@ def sanitize_multiselect_state(state, key: str, options: list) -> list:
 
 
 def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFrame, dict[str, float], dict]:
+    mobile_view = st.sidebar.toggle("\U0001f4f1 Vue mobile compacte", value=False, help="Affiche d'abord les chiffres cl\u00e9s, pour un t\u00e9l\u00e9phone.")
     st.sidebar.header("Filtres")
     date_options = DATE_TYPE_OPTIONS
     selected_date_type = st.sidebar.selectbox("Type de date d'analyse", date_options, index=0, key=ANALYSIS_DATE_TYPE_KEY)
@@ -441,6 +442,7 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
         "preparation_red": st.sidebar.slider("Preparation rouge > ", 0.0, 1.0, DEFAULT_THRESHOLDS["preparation_red"], 0.01),
     }
     thresholds["ad_cost_per_purchase"] = float(ad_cost)
+    thresholds["mobile_view"] = bool(mobile_view)
     # Alert level for the transformation rates: 5 points under the objective.
     thresholds["transformation_orange"] = max(thresholds["transformation_green"] - 0.05, 0.0)
     thresholds["net_transformation_orange"] = max(thresholds["net_transformation_green"] - 0.05, 0.0)
