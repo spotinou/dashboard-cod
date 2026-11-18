@@ -88,7 +88,7 @@ def test_format_table_formats_all_rate_like_columns_and_invalid_values():
         }
     )
     formatted = format_table(df)
-    assert formatted["Taux confirmation"].iloc[0] == "70.4 %"
+    assert formatted["Taux non annulé"].iloc[0] == "70.4 %"
     assert formatted["delivery_rate"].iloc[0] == "29.6 %"
     assert formatted["ratio_test"].iloc[0] == "59.9 %"
     assert formatted["pourcentage_test"].iloc[0] == "100.0 %"

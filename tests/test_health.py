@@ -184,3 +184,18 @@ def test_mobile_stuck_summary_card():
     # A (confirmation), C (préparation), D (livraison) are stuck on Jan 15
     assert (title, value, tone) == ("Commandes bloquées", "3", "bad")
     assert "1 en attente de confirmation (> 3 j)" in note
+
+
+def test_cockpit_shows_each_rate_once(monkeypatch):
+    import src.views.cockpit as cockpit
+
+    shown = []
+    monkeypatch.setattr(cockpit.st, "markdown", lambda html, **_: shown.append(html))
+    monkeypatch.setattr(cockpit.st, "columns", lambda n: [__import__("contextlib").nullcontext()] * n)
+    df = build_df()
+    context = {"selected_date_type": "Date de création", "start_date": pd.Timestamp("2026-01-08").date(), "end_date": pd.Timestamp("2026-01-15").date()}
+    cockpit.render_cockpit(df, df, context, compute_global_metrics(df), {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0})
+    page = "".join(shown)
+    for title in ["Taux confirmé<", "Taux livré (sur expédiées)<", "Taux livré (sur colis terminés)<", "Taux de transformation brute<",
+                  "Taux de transformation nette<", "Taux retour<", "Taux annulé<", "Multiplicateur"]:
+        assert page.count(title) == 1, title

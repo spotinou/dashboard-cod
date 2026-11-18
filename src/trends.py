@@ -153,6 +153,8 @@ COMPARISON_METRICS = [
     ("delivery_finalized_rate", "Taux livré (sur colis terminés)", "rate", True),
     ("transformation_real_rate", "Taux de transformation brute", "rate", True),
     ("net_transformation_rate", "Taux de transformation nette", "rate", True),
+    ("return_rate_on_sent", "Taux retour", "rate", False),
+    ("cancellation_rate", "Taux annulé", "rate", False),
 ]
 # Indicators that keep moving while parcels are still on the road.
 DELIVERY_DEPENDENT = {"delivery_total_rate_on_sent", "delivery_finalized_rate", "return_rate_on_sent", "transformation_real_rate", "net_transformation_rate"}
@@ -248,9 +250,7 @@ def compute_period_comparison(current: dict, previous: dict | None) -> list[dict
 TREND_CHARTS = [
     ("taux_confirmation", "Taux confirmé", "", "rate", True, "line", False),
     ("taux_livraison_total", "Taux livré (sur expédiées)", "", "rate", True, "line", True),
-    ("taux_livraison_finalisees", "Taux livré (sur colis terminés)", "", "rate", True, "line", True),
     ("taux_transformation_reel", "Taux de transformation brute", "", "rate", True, "line", True),
-    ("taux_transformation_nette", "Taux de transformation nette", "", "rate", True, "line", True),
     ("commandes_recues", "Commandes reçues", "", "count", True, "bar", False),
 ]
 

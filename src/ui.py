@@ -268,3 +268,11 @@ from .views.mobile_view import (  # noqa: F401
     render_mobile_summary,
     stuck_summary_card,
 )
+from .views.cockpit import (  # noqa: F401
+    COMPARISON_KEY,
+    DELTA_COLORS,
+    comparison_rows,
+    delta_html,
+    received_card_html,
+    render_cockpit,
+)

@@ -28,7 +28,7 @@ def overall_text(summary: dict) -> str:
     return f"{icon} {' et '.join(parts)} : " + ", ".join(s["label"] for s in summary["to_watch"]) + "."
 
 
-def vital_sign_html(sign: dict) -> str:
+def vital_sign_html(sign: dict, extra_html: str = "", show_sentence: bool = True) -> str:
     """One rate as a gauge 0-100 % with a black tick at the objective."""
     label, fill, pill_bg, pill_fg = VERDICT_STYLE.get(sign["verdict"], VERDICT_STYLE["neutral"])
     value = sign["value"]
@@ -42,13 +42,13 @@ def vital_sign_html(sign: dict) -> str:
         f'<span style="font-size:14px;font-weight:800;color:#0f172a">{html_text(sign["label"])}{help_icon(sign["label"])}</span>'
         f'<span style="background:{pill_bg};color:{pill_fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{label}</span></div>'
         f'<div style="font-size:28px;font-weight:850;color:#0f172a;margin-top:4px;line-height:1.1">{html_text(pct(value))}</div>'
-        f'<div style="font-size:12.5px;color:#475569;margin-top:2px">{html_text(sentence)}</div>'
-        '<div style="position:relative;height:10px;background:#eef2f7;border-radius:5px;margin:14px 0 4px">'
+        + (f'<div style="font-size:12.5px;color:#475569;margin-top:2px">{html_text(sentence)}</div>' if show_sentence else "")
+        + '<div style="position:relative;height:10px;background:#eef2f7;border-radius:5px;margin:14px 0 4px">'
         f'<div style="width:{width:.1f}%;height:10px;background:{fill};border-radius:5px"></div>'
         f'<div style="position:absolute;left:{objective:.1f}%;top:-5px;width:2px;height:20px;background:#0f172a"></div></div>'
         f'<div style="position:relative;height:16px;font-size:11px;color:#0f172a;font-weight:700">'
         f'<span style="position:absolute;left:{objective:.1f}%;transform:translateX(-50%);white-space:nowrap">objectif {sign_text} {html_text(pct(sign["objective"]))}</span></div>'
-        "</div>"
+        f"{extra_html}</div>"
     )
 
 

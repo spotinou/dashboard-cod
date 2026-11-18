@@ -24,7 +24,7 @@ DISPLAY_COLUMNS = {
     "en_livraison": "En cours livraison",
     "en_cours_logistique": "En cours logistique",
     "retours": "Retours / échecs",
-    "taux_confirmation": "Taux confirmation",
+    "taux_confirmation": "Taux non annulé",
     "taux_annulation": "Taux annulation avant expédition",
     "taux_preparation": "Taux en pr\u00e9paration",
     "taux_dispatch": "Taux en dispatch",
@@ -201,6 +201,11 @@ def html_text(value) -> str:
 
 # Hover bubble ("ⓘ") shown next to any title that contains one of these terms.
 GLOSSARY = {
+    "taux confirmé": "Sur 100 commandes reçues, combien sont confirmées (hors celles encore en confirmation).",
+    "livré (sur expédiées)": "Sur 100 colis expédiés, combien sont livrés. Les colis encore en route font baisser ce taux.",
+    "livré (sur colis terminés)": "Sur 100 colis arrivés au bout (livrés ou revenus), combien sont livrés. Ignore les colis encore en route.",
+    "taux retour": "Sur 100 colis expédiés, combien reviennent (retour ou échec de livraison).",
+    "taux annulé": "Sur 100 commandes reçues, combien sont annulées.",
     "transformation brute": (
         "Sur 100 commandes reçues, combien sont livrées au client. "
         "Calcul : livrées ÷ reçues. C'est le taux de bout en bout : il compte tout, même les annulations."
@@ -226,6 +231,8 @@ def tone_class(value: float | None, kind: str, thresholds: dict[str, float]) -> 
         return "neutral"
     if kind in {"transformation", "net_transformation"} and f"{kind}_green" in thresholds:
         return "good" if value >= thresholds[f"{kind}_green"] else "warn" if value >= thresholds[f"{kind}_orange"] else "bad"
+    if kind == "confirmation" and "confirmation_green" in thresholds:
+        return "good" if value >= thresholds["confirmation_green"] else "warn" if value >= thresholds["confirmation_orange"] else "bad"
     if kind in {"confirmation", "delivery", "transformation"}:
         return "good" if value >= thresholds["delivery_green"] else "warn" if value >= thresholds["delivery_orange"] else "bad"
     if kind == "return":
