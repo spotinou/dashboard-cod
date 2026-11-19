@@ -13,9 +13,9 @@ from ..health import average_delivery_days, health_summary, vital_signs
 from ..metrics import compute_global_metrics
 from ..trends import cac_multiplier, compute_period_comparison
 from .evolution import format_delta, format_metric_value, previous_period_frame
-from .formatting import format_count, format_date, html_text
-from .health_view import delivery_time_html, overall_text, vital_sign_html
-from .overview import big_rate_card_html, cac_multiplier_card_html, owner_kpi_sections
+from .formatting import format_count, format_date, help_icon, html_text, pct
+from .health_view import CARD_STYLE, overall_text, vital_sign_html
+from .overview import format_factor
 
 # vital sign key -> comparison key
 COMPARISON_KEY = {
@@ -54,14 +54,46 @@ def comparison_rows(loaded_df: pd.DataFrame, date_context: dict, metrics: dict) 
 
 
 def received_card_html(metrics: dict, row: dict | None) -> str:
-    from .health_view import CARD_STYLE
-
     return (
         f'<div style="{CARD_STYLE}">'
-        '<div style="font-size:14px;font-weight:800;color:#0f172a">\U0001f6d2 Commandes reçues</div>'
+        '<div style="font-size:14px;font-weight:800;color:#0f172a">\U0001f6d2 Commandes re\u00e7ues</div>'
         f'<div style="font-size:28px;font-weight:850;color:#0f172a;margin-top:4px;line-height:1.1">{format_count(metrics.get("orders_received", 0))}</div>'
         f"{delta_html(row)}</div>"
     )
+
+
+def multiplier_card_html(mult: dict, ad_cost: float = 0.0) -> str:
+    """Acquisition cost multiplier, same size as the other cards."""
+    real, estimated = mult.get("real"), mult.get("estimated")
+    lines = f"{format_count(mult['received'])} re\u00e7ues \u00f7 {format_count(mult['delivered'])} livr\u00e9es"
+    if estimated is not None:
+        lines += f"<br>Estim\u00e9 colis arriv\u00e9s : <b>{html_text(format_factor(estimated))}</b>"
+    if ad_cost and real is not None:
+        cost = f"{ad_cost * real:.2f}".replace(".", ",") + " \u20ac"
+        lines += f"<br>Vrai co\u00fbt client : <b>{html_text(cost)}</b>"
+    return (
+        f'<div style="{CARD_STYLE};border-left:5px solid #7c3aed;background:#faf5ff">'
+        f'<div style="font-size:14px;font-weight:800;color:#0f172a">\U0001f4b8 Multiplicateur CAC{help_icon("multiplicateur")}</div>'
+        f'<div style="font-size:28px;font-weight:850;color:#0f172a;margin-top:4px;line-height:1.1">{html_text(format_factor(real))}</div>'
+        f'<div style="font-size:12px;color:#475569;margin-top:6px;line-height:1.45">{lines}</div></div>'
+    )
+
+
+def finished_parcels_html(sign: dict | None, row: dict | None, delay: dict) -> str:
+    """Second line of the "Taux livré" card: the same rate on finished parcels, and the delivery time."""
+    parts = []
+    if sign is not None:
+        dot = {"good": "\U0001f7e2", "warn": "\U0001f7e0", "bad": "\U0001f534"}.get(sign["verdict"], "\u26aa")
+        delta = ""
+        if row and row.get("delta") is not None:
+            color = DELTA_COLORS.get(row.get("tone"), DELTA_COLORS["neutral"])
+            delta = f' <span style="color:{color};font-weight:700">{html_text(format_delta(row))}</span>'
+        parts.append(f"{dot} Sur colis termin\u00e9s : <b>{html_text(pct(sign['value']))}</b>{delta}")
+    if delay.get("days") is not None:
+        parts.append(f"\U0001f69a D\u00e9lai moyen : <b>{delay['days']:.1f} j</b>".replace(".", ","))
+    if not parts:
+        return ""
+    return f'<div style="font-size:12px;color:#334155;margin-top:6px;line-height:1.5;border-top:1px dashed #e2e8f0;padding-top:5px">{"<br>".join(parts)}</div>'
 
 
 def render_cockpit(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context: dict, metrics: dict, thresholds: dict[str, float]) -> None:
@@ -69,24 +101,29 @@ def render_cockpit(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context: dict
         rows, note = comparison_rows(loaded_df, date_context, metrics)
         signs = vital_signs(metrics, thresholds)
         by_key = {s["key"]: s for s in signs}
+
+        def card(key: str, **kwargs) -> str:
+            return vital_sign_html(by_key[key], kwargs.pop("extra", "") or delta_html(rows.get(COMPARISON_KEY[key])), show_sentence=False, **kwargs)
+
+        delivery_extra = delta_html(rows.get(COMPARISON_KEY["delivery"])) + finished_parcels_html(
+            by_key.get("delivery_finalized"), rows.get(COMPARISON_KEY["delivery_finalized"]), average_delivery_days(df)
+        )
+        cards = [
+            card("transformation", highlight="#16a34a", title="\u2b50 Transformation brute"),
+            multiplier_card_html(cac_multiplier(metrics), thresholds.get("ad_cost_per_purchase", 0.0)),
+            card("confirmation"),
+            card("delivery", extra=delivery_extra, title="Taux livr\u00e9"),
+            card("net_transformation", title="Transformation nette"),
+            card("return"),
+            card("cancellation"),
+            received_card_html(metrics, rows.get("orders_received")),
+        ]
         st.markdown(
             '<div class="section-tight">Parcours COD</div>'
-            f'<div class="section-subtitle">Chaque taux une seule fois. Trait noir = ton objectif (barre latérale, rubrique Seuils). {html_text(note)}</div>'
-            f'<div style="font-size:15px;font-weight:800;color:#0f172a;margin:2px 0 8px">{html_text(overall_text(health_summary(signs)))}</div>',
+            f'<div class="section-subtitle">Trait noir = ton objectif (r\u00e9glable dans la barre lat\u00e9rale). {html_text(note)}</div>'
+            f'<div style="font-size:14px;font-weight:800;color:#0f172a;margin:2px 0 8px">{html_text(overall_text(health_summary(signs)))}</div>'
+            f'<div style="display:flex;gap:12px;flex-wrap:wrap">{"".join(cards)}</div>',
             unsafe_allow_html=True,
         )
-        # 1. The key result and what it costs in ads
-        brute_card = next(card for card in owner_kpi_sections(metrics, thresholds) if card[0] == "Taux de transformation brute")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(big_rate_card_html(brute_card, thresholds.get("transformation_green"), delta_html(rows.get("transformation_real_rate"))), unsafe_allow_html=True)
-        with col2:
-            st.markdown(cac_multiplier_card_html(cac_multiplier(metrics), thresholds.get("ad_cost_per_purchase", 0.0)), unsafe_allow_html=True)
-        # 2. Every other rate, once
-        order = ["confirmation", "delivery", "delivery_finalized", "net_transformation", "return", "cancellation"]
-        cards = [vital_sign_html(by_key[k], delta_html(rows.get(COMPARISON_KEY[k])), show_sentence=False) for k in order if k in by_key]
-        cards.append(delivery_time_html(average_delivery_days(df)))
-        cards.append(received_card_html(metrics, rows.get("orders_received")))
-        st.markdown(f'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">{"".join(cards)}</div>', unsafe_allow_html=True)
     except Exception as exc:  # never let the new section break the dashboard
         st.warning(f"Parcours COD indisponible pour ce fichier : {exc}")

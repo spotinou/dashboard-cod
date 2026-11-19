@@ -62,7 +62,8 @@ def test_health_summary_and_text():
     assert summary["overall"] in {GOOD, WARN, BAD}
     text = overall_text(summary)
     for sign in summary["to_watch"]:
-        assert sign["label"] in text
+        assert sign["label"].split(" (")[0] in text
+    assert text.count("Taux livré") <= 1
     good = health_summary([{"verdict": GOOD, "label": "x"}] * 7)
     assert overall_text(good).startswith("🟢 Tout va bien")
 
@@ -196,6 +197,16 @@ def test_cockpit_shows_each_rate_once(monkeypatch):
     context = {"selected_date_type": "Date de création", "start_date": pd.Timestamp("2026-01-08").date(), "end_date": pd.Timestamp("2026-01-15").date()}
     cockpit.render_cockpit(df, df, context, compute_global_metrics(df), {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0})
     page = "".join(shown)
-    for title in ["Taux confirmé<", "Taux livré (sur expédiées)<", "Taux livré (sur colis terminés)<", "Taux de transformation brute<",
-                  "Taux de transformation nette<", "Taux retour<", "Taux annulé<", "Multiplicateur"]:
+    for title in ["⭐ Transformation brute<", "Multiplicateur CAC", "Taux confirmé<", "Taux livré<", "Sur colis terminés",
+                  "Transformation nette<", "Taux retour<", "Taux annulé<", "Commandes reçues<"]:
         assert page.count(title) == 1, title
+    # the two delivery rates share one card
+    assert "Taux livré (sur" not in page
+
+
+def test_multiplier_card_with_ad_cost():
+    from src.views.cockpit import multiplier_card_html
+
+    html = multiplier_card_html({"real": 2.35, "estimated": 2.06, "received": 970, "delivered": 413}, ad_cost=1.5)
+    assert "× 2,35" in html and "× 2,06" in html and "3,53 €" in html  # 1,5 × 2,35 = 3,525
+    assert "Vrai coût" not in multiplier_card_html({"real": 2.0, "estimated": None, "received": 2, "delivered": 1})

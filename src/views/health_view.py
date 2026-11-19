@@ -25,10 +25,12 @@ def overall_text(summary: dict) -> str:
     if counts[WARN]:
         parts.append(f"{counts[WARN]} point{'s' if counts[WARN] > 1 else ''} à surveiller")
     icon = "\U0001f534" if counts[BAD] else "\U0001f7e0"
-    return f"{icon} {' et '.join(parts)} : " + ", ".join(s["label"] for s in summary["to_watch"]) + "."
+    # "Taux livré (sur expédiées)" and "(sur colis terminés)" are one rate seen two ways: name it once.
+    labels = list(dict.fromkeys(s["label"].split(" (")[0] for s in summary["to_watch"]))
+    return f"{icon} {' et '.join(parts)} : " + ", ".join(labels) + "."
 
 
-def vital_sign_html(sign: dict, extra_html: str = "", show_sentence: bool = True) -> str:
+def vital_sign_html(sign: dict, extra_html: str = "", show_sentence: bool = True, highlight: str | None = None, title: str | None = None) -> str:
     """One rate as a gauge 0-100 % with a black tick at the objective."""
     label, fill, pill_bg, pill_fg = VERDICT_STYLE.get(sign["verdict"], VERDICT_STYLE["neutral"])
     value = sign["value"]
@@ -37,9 +39,9 @@ def vital_sign_html(sign: dict, extra_html: str = "", show_sentence: bool = True
     sign_text = "≥" if sign["higher_is_better"] else "≤"
     sentence = sign["explanation"].format(n=f"{round(value * 100)}" if value is not None and not pd.isna(value) else "—")
     return (
-        f'<div style="{CARD_STYLE}">'
+        f'<div style="{CARD_STYLE}{";border-left:5px solid " + highlight if highlight else ""}">'
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
-        f'<span style="font-size:14px;font-weight:800;color:#0f172a">{html_text(sign["label"])}{help_icon(sign["label"])}</span>'
+        f'<span style="font-size:14px;font-weight:800;color:#0f172a">{html_text(title or sign["label"])}{help_icon(title or sign["label"])}</span>'
         f'<span style="background:{pill_bg};color:{pill_fg};border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap">{label}</span></div>'
         f'<div style="font-size:28px;font-weight:850;color:#0f172a;margin-top:4px;line-height:1.1">{html_text(pct(value))}</div>'
         + (f'<div style="font-size:12.5px;color:#475569;margin-top:2px">{html_text(sentence)}</div>' if show_sentence else "")

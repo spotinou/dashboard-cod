@@ -204,6 +204,15 @@ GLOSSARY = {
     "taux confirmé": "Sur 100 commandes reçues, combien sont confirmées (hors celles encore en confirmation).",
     "livré (sur expédiées)": "Sur 100 colis expédiés, combien sont livrés. Les colis encore en route font baisser ce taux.",
     "livré (sur colis terminés)": "Sur 100 colis arrivés au bout (livrés ou revenus), combien sont livrés. Ignore les colis encore en route.",
+    "taux livré": (
+        "Grand chiffre : sur 100 colis expédiés, combien sont livrés (les colis encore en route le font baisser). "
+        "En dessous : le même taux calculé seulement sur les colis arrivés au bout (livrés ou revenus), "
+        "plus juste pour les jours récents."
+    ),
+    "multiplicateur": (
+        "Combien d'achats Meta il faut pour 1 client livré. Multiplie ton coût par achat Meta par ce chiffre "
+        "pour avoir ton vrai coût d'acquisition. Calcul : reçues ÷ livrées (= 1 ÷ transformation brute)."
+    ),
     "taux retour": "Sur 100 colis expédiés, combien reviennent (retour ou échec de livraison).",
     "taux annulé": "Sur 100 commandes reçues, combien sont annulées.",
     "transformation brute": (

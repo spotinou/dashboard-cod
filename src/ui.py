@@ -273,6 +273,8 @@ from .views.cockpit import (  # noqa: F401
     DELTA_COLORS,
     comparison_rows,
     delta_html,
+    finished_parcels_html,
+    multiplier_card_html,
     received_card_html,
     render_cockpit,
 )
@@ -280,9 +282,14 @@ from .views.data_source import (  # noqa: F401
     CACHE_SECONDS,
     DEFAULT_BASE_URL,
     HISTORY_OPTIONS,
+    LAST_GOOD_KEY,
+    LAST_REFRESH_KEY,
+    REFRESH_COOLDOWN_SECONDS,
     _load_from_api,
     _load_from_excel,
+    _refresh_button,
     api_settings,
+    api_shops,
     load_api_orders,
     load_orders,
 )
