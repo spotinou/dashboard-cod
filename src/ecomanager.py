@@ -138,14 +138,21 @@ def _name(value) -> str | None:
     return value
 
 
-def orders_to_rows(orders: Iterable[dict]) -> list[dict]:
-    """One row per product line, with the Excel export column names."""
+def orders_to_rows(orders: Iterable[dict], shop: str | None = None, prefix_reference: bool = False) -> list[dict]:
+    """One row per product line, with the Excel export column names.
+
+    With several shops, references are prefixed by the shop name so that two
+    orders with the same reference in two shops are never merged."""
     rows = []
     for order in orders:
+        reference = order.get("reference")
+        if prefix_reference and shop and reference:
+            reference = f"{shop} \u00b7 {reference}"
         common = {
-            "Référence commande": order.get("reference"),
+            "Boutique": shop,
+            "Référence commande": reference,
             "Tracking": order.get("tracking"),
-            "N°commande": order.get("id"),
+            "N°commande": f"{shop}-{order.get('id')}" if prefix_reference and shop else order.get("id"),
             "Méthode de livraison": "Stop desk" if order.get("is_stopdesk") in (True, 1, "1") else "Domicile",
             "Statut commande": order.get("order_state_name"),
             "Client": order.get("full_name"),
@@ -189,9 +196,15 @@ def orders_to_rows(orders: Iterable[dict]) -> list[dict]:
     return rows
 
 
-def orders_to_dataframe(orders: Iterable[dict]) -> pd.DataFrame:
+def orders_to_dataframe(orders: Iterable[dict], shop: str | None = None) -> pd.DataFrame:
     """Same cleaned table as `load_excel`, so every dashboard calculation is unchanged."""
-    rows = orders_to_rows(orders)
+    return shops_to_dataframe([(shop, list(orders))])
+
+
+def shops_to_dataframe(orders_by_shop: list[tuple[str | None, list[dict]]]) -> pd.DataFrame:
+    """One table for one or several shops (column "Boutique" tells them apart)."""
+    several = len(orders_by_shop) > 1
+    rows = [row for shop, orders in orders_by_shop for row in orders_to_rows(orders, shop, prefix_reference=several)]
     if not rows:
         raise EcoManagerError("Aucune commande trouvée sur la période chargée.")
     return prepare_dataframe(pd.DataFrame(rows))
