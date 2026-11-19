@@ -187,21 +187,36 @@ def test_mobile_stuck_summary_card():
     assert "1 en attente de confirmation (> 3 j)" in note
 
 
-def test_cockpit_shows_each_rate_once(monkeypatch):
+def test_cockpit_shows_the_order_journey_in_numbers(monkeypatch):
     import src.views.cockpit as cockpit
 
     shown = []
     monkeypatch.setattr(cockpit.st, "markdown", lambda html, **_: shown.append(html))
-    monkeypatch.setattr(cockpit.st, "columns", lambda n: [__import__("contextlib").nullcontext()] * n)
     df = build_df()
+    metrics = compute_global_metrics(df)
     context = {"selected_date_type": "Date de création", "start_date": pd.Timestamp("2026-01-08").date(), "end_date": pd.Timestamp("2026-01-15").date()}
-    cockpit.render_cockpit(df, df, context, compute_global_metrics(df), {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0})
+    cockpit.render_cockpit(df, df, context, metrics, {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0})
     page = "".join(shown)
-    for title in ["⭐ Transformation brute<", "Multiplicateur CAC", "Taux confirmé<", "Taux livré<", "Sur colis terminés",
-                  "Transformation nette<", "Taux retour<", "Taux annulé<", "Commandes reçues<"]:
+    # one card per step of the journey, each title once
+    for title in ["Commandes reçues<", "Confirmées<", "Annulées<", "Expédiées<", "Livrées<", "Retours<", "Transformation brute<", "Multiplicateur CAC<"]:
         assert page.count(title) == 1, title
-    # the two delivery rates share one card
-    assert "Taux livré (sur" not in page
+    # big numbers are order counts, with their base
+    assert f">{metrics['orders_received']}<" in page
+    assert f"des {metrics['orders_received']} reçues" in page
+    assert f"des {metrics['orders_sent']} expédiées" in page
+    assert "Sur colis terminés" in page and "Nette (hors annulées)" in page
+    # no jargon and no unexplained coloured dots
+    for banned in ["pts", "🟢", "🟠", "🔴", "⚪"]:
+        assert banned not in page, banned
+
+
+def test_previous_count_and_rate_are_shown_without_misleading_arrow():
+    from src.views.cockpit import _count_before
+
+    row = {"previous": 0.195, "tone": "good", "direction": "down", "delta": -0.01}
+    html = _count_before({"orders_cancelled": 180}, "orders_cancelled", row)
+    assert "avant : 180 · 19.5 %" in html and "▼" not in html and "#166534" in html
+    assert _count_before(None, "orders_cancelled", row) == ""
 
 
 def test_multiplier_card_with_ad_cost():
@@ -210,3 +225,16 @@ def test_multiplier_card_with_ad_cost():
     html = multiplier_card_html({"real": 2.35, "estimated": 2.06, "received": 970, "delivered": 413}, ad_cost=1.5)
     assert "× 2,35" in html and "× 2,06" in html and "3,53 €" in html  # 1,5 × 2,35 = 3,525
     assert "Vrai coût" not in multiplier_card_html({"real": 2.0, "estimated": None, "received": 2, "delivered": 1})
+
+
+def test_confirmed_card_rate_is_exactly_count_over_received(monkeypatch):
+    import src.views.cockpit as cockpit
+
+    # 970 received, 41 in confirmation, 203 cancelled -> 726 confirmed = 74.8 % (not the rounded 74.9 %)
+    metrics = {"orders_received": 970, "orders_in_confirmation": 41, "orders_cancelled": 203, "orders_confirmed_net": 767,
+               "orders_unclassified": 0, "orders_sent": 723, "orders_delivered": 413, "orders_returned_failed": 225,
+               "orders_preparation": 3, "cancellation_rate": 203 / 970, "delivery_total_rate_on_sent": 413 / 723,
+               "delivery_finalized_rate": 413 / 638, "return_rate_on_sent": 225 / 723, "transformation_real_rate": 413 / 970}
+    cards = cockpit.journey_cards(build_df().iloc[0:0], metrics, {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0}, {}, None)
+    confirmed = cards[1]
+    assert ">726<" in confirmed and "74.8 %</b> des 970 reçues" in confirmed

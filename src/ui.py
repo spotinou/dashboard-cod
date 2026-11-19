@@ -271,12 +271,18 @@ from .views.mobile_view import (  # noqa: F401
 from .views.cockpit import (  # noqa: F401
     COMPARISON_KEY,
     DELTA_COLORS,
+    VERDICT_BADGE,
+    _count_before,
+    before_html,
     comparison_rows,
     delta_html,
-    finished_parcels_html,
+    flow_card_html,
+    gauge_html,
+    journey_cards,
     multiplier_card_html,
     received_card_html,
     render_cockpit,
+    summary_text,
 )
 from .views.data_source import (  # noqa: F401
     CACHE_SECONDS,
