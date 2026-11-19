@@ -20,10 +20,19 @@ Le dashboard lit les commandes directement depuis EcoManager, sans export Excel.
 2. Sur share.streamlit.io, ouvre ton app → Settings → Secrets, colle ceci et enregistre :
 
    ```toml
-   [ecomanager]
-   token = "TON_TOKEN_ICI"
+   [[ecomanager.shops]]
+   name = "Maison Luxelle"
+   token = "TOKEN_BOUTIQUE_1"
    base_url = "https://maisonluxelle.ecomanager.dz"
+
+   [[ecomanager.shops]]
+   name = "ELBARAKA"
+   token = "TOKEN_BOUTIQUE_2"
+   base_url = "https://ADRESSE-BOUTIQUE-2.ecomanager.dz"
    ```
+
+   Un bloc `[[ecomanager.shops]]` par boutique. Les commandes de toutes les boutiques sont additionnées ;
+   le filtre « Boutique » de la barre latérale permet de les voir séparément.
 
 3. L'app redémarre : choisis « API EcoManager » dans la barre latérale.
 

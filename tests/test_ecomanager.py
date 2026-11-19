@@ -158,3 +158,39 @@ def test_api_dates_are_not_swapped():
     df = orders_to_dataframe([doc_order(1, "Livrée", "2026-03-04 08:06:38", shipped_at="2026-03-05 10:00:00", delivered_at="2026-03-07 09:00:00")])
     assert df["Crée le"].iloc[0] == pd.Timestamp("2026-03-04 08:06:38")
     assert df["Livrée le"].iloc[0] == pd.Timestamp("2026-03-07 09:00:00")
+
+
+def test_two_shops_are_combined_without_merging_orders():
+    from src.ecomanager import shops_to_dataframe
+
+    shop_a = [doc_order(1, "Livrée", "2026-11-01 10:00:00", shipped_at="2026-11-02 10:00:00", delivered_at="2026-11-04 10:00:00"),
+              doc_order(2, "Annulée", "2026-11-01 11:00:00")]
+    # same ids / references as shop A on purpose
+    shop_b = [doc_order(1, "En livraison", "2026-11-02 10:00:00", shipped_at="2026-11-03 10:00:00")]
+    df = shops_to_dataframe([("Maison Luxelle", shop_a), ("ELBARAKA", shop_b)])
+    metrics = compute_global_metrics(df)
+    assert metrics["orders_received"] == 3  # 2 + 1, nothing merged
+    assert metrics["orders_delivered"] == 1 and metrics["orders_cancelled"] == 1 and metrics["orders_sent"] == 2
+    assert sorted(df["Boutique"].unique()) == ["ELBARAKA", "Maison Luxelle"]
+    assert df["order_id"].nunique() == 3
+    # one shop alone: references are left untouched
+    single = orders_to_dataframe(shop_a, shop="Maison Luxelle")
+    assert set(single["Référence commande"]) == {"DEM1", "DEM2"}
+    assert set(single["Boutique"]) == {"Maison Luxelle"}
+
+
+def test_secrets_formats(monkeypatch):
+    import src.views.data_source as ds
+
+    monkeypatch.setattr(ds.st, "secrets", {"ecomanager": {"shops": [
+        {"name": "Maison Luxelle", "token": "A", "base_url": "https://maisonluxelle.ecomanager.dz"},
+        {"name": "ELBARAKA", "token": "B", "base_url": "https://elbaraka.ecomanager.dz"},
+        {"name": "Sans clé"},
+    ]}})
+    shops = ds.api_shops()
+    assert [s["name"] for s in shops] == ["Maison Luxelle", "ELBARAKA"]
+    assert shops[1]["base_url"] == "https://elbaraka.ecomanager.dz"
+    monkeypatch.setattr(ds.st, "secrets", {"ecomanager": {"token": "X"}})  # older one-shop format
+    assert ds.api_shops() == [{"name": None, "base_url": ds.DEFAULT_BASE_URL, "token": "X"}]
+    monkeypatch.setattr(ds.st, "secrets", {})
+    assert ds.api_shops() == []
