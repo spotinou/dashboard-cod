@@ -12,6 +12,27 @@ Application Streamlit locale pour analyser un export Excel CRM/ERP de commandes 
 - Taux de transformation brute = livrées ÷ reçues (sur 100 commandes reçues, combien sont livrées).
 - Taux de transformation nette = livrées ÷ (reçues − annulées) : même chose sans les annulées (faux numéros, doublons, refus).
 
+## Connexion à l'API EcoManager (recommandé)
+
+Le dashboard lit les commandes directement depuis EcoManager, sans export Excel.
+
+1. Dans EcoManager, ouvre la page « Configuration de la boutique » et copie ton token API.
+2. Sur share.streamlit.io, ouvre ton app → Settings → Secrets, colle ceci et enregistre :
+
+   ```toml
+   [ecomanager]
+   token = "TON_TOKEN_ICI"
+   base_url = "https://maisonluxelle.ecomanager.dz"
+   ```
+
+3. L'app redémarre : choisis « API EcoManager » dans la barre latérale.
+
+Le token n'est jamais écrit dans le code ni sur GitHub. Les commandes sont gardées en mémoire 15 minutes
+(bouton « Rafraîchir maintenant » pour forcer). La lecture respecte les limites de l'API (50 appels / minute) ;
+65 jours d'historique ≈ 100 appels ≈ 2 minutes la première fois. Le fichier Excel reste disponible en secours.
+
+En local : même contenu dans `.streamlit/secrets.toml` (ignoré par git).
+
 ## Lancer
 
 ```bash
@@ -42,6 +63,7 @@ Les commandes en préparation ne sont jamais comptées dans la performance livre
 Calculs (aucun affichage) :
 
 - `app.py` : point d'entrée Streamlit.
+- `src/ecomanager.py` : lecture des commandes depuis l'API EcoManager (même format que l'export Excel).
 - `src/data_loader.py` : lecture Excel, mapping flexible des colonnes.
 - `src/cleaning.py` : nettoyage texte, montants, dates, normalisations.
 - `src/classification.py` : classification COD.

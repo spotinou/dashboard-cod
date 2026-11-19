@@ -5,12 +5,12 @@ import pandas as pd
 import streamlit as st
 
 from ..alerts import generate_alerts
-from ..data_loader import load_excel, validate_columns
 from ..metrics import compute_confirmation_metrics, compute_global_metrics, compute_livreur_metrics, compute_livreur_wilaya_alerts, compute_product_metrics, compute_product_wilaya_alerts, compute_wilaya_metrics
 from ..validation import compute_validation_checks
 from .formatting import reliable_rows
-from .filters import filter_dataframe, summarize_missing_dates, uploaded_file_signature
+from .filters import filter_dataframe, summarize_missing_dates
 from .analysis import add_product_advice, add_volume_reading, compute_confirmatrice_quality, compute_dimension_performance, compute_livreur_wilaya_arbitrage, compute_opportunities, compute_priority_actions, confirmatrice_product_performance, livreur_wilaya_performance, preparation_metrics_by_dimension, product_livreur_performance, product_wilaya_performance, sku_product_performance, source_product_performance, wilaya_livreur_comparison
+from .data_source import load_orders
 from .styles import DASHBOARD_CSS
 from .tabs import render_global_tab, render_confirmation_tab, render_delivery_tab, render_products_tab, render_wilayas_tab, render_validation_tab, render_data_tab
 
@@ -121,22 +121,10 @@ def run_app() -> None:
     st.set_page_config(page_title="Dashboard COD", layout="wide")
     st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
     st.title("Dashboard opérationnel COD")
-    uploaded = st.sidebar.file_uploader("Upload Excel CRM/ERP", type=["xlsx", "xls"])
-    if uploaded is None:
-        st.info("Upload un export Excel pour afficher les KPI COD.")
+    loaded = load_orders()
+    if loaded is None:
         return
-
-    file_signature = uploaded_file_signature(uploaded)
-
-    try:
-        raw_preview = pd.read_excel(uploaded, nrows=5, dtype=object)
-        uploaded.seek(0)
-        for warning in validate_columns(raw_preview):
-            st.warning(warning)
-        df = load_excel(uploaded)
-    except Exception as exc:
-        st.error(f"Impossible de lire le fichier : {exc}")
-        return
+    df, file_signature = loaded
 
     loaded_df = df.copy()
     df, thresholds, date_context = filter_dataframe(df, file_signature=file_signature)
