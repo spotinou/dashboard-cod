@@ -213,7 +213,7 @@ def test_one_old_order_among_recent_ones_does_not_stop_the_reading():
     orders = fetch_orders("https://x", "T", datetime(2026, 10, 1), session=session, limiter=NoWait(), report=report)
     assert [o["id"] for o in orders] == [10, 8, 7]
     assert len(session.calls) == 4
-    assert report == {"pages": 4, "skipped_old": 4, "duplicates": 0, "complete": True}
+    assert report == {"pages": 4, "skipped_old": 4, "duplicates": 0, "trashed": 0, "complete": True}
 
 
 def test_duplicate_orders_across_pages_are_counted_once():
@@ -246,3 +246,16 @@ def test_unexpected_payloads_are_clear_errors():
 
     with pytest.raises(EcoManagerError, match="illisible"):
         fetch_orders("https://x", "T", datetime(2026, 1, 1), session=FakeSession([NotJson(200)]), limiter=NoWait())
+
+
+def test_trashed_orders_are_left_out():
+    from src.ecomanager import is_trashed, orders_to_rows
+    live = {"id": 1, "reference": "A", "order_state_id": 1}
+    trashed = [
+        {"id": 2, "reference": "B", "order_state_id": 1, "deleted_at": "2026-11-11 09:00:00"},
+        {"id": 3, "reference": "C", "order_state_id": 1, "order_state_name": "En corbeille"},
+        {"id": 4, "reference": "D", "order_state_id": 1, "is_trashed": True},
+    ]
+    assert not is_trashed(live)
+    assert all(is_trashed(o) for o in trashed)
+    assert [r["Référence commande"] for r in orders_to_rows([live, *trashed])] == ["A"]

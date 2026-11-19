@@ -111,7 +111,7 @@ def fetch_orders(
     seen: set = set()
     old_pages = 0
     report = report if report is not None else {}
-    report.update({"pages": 0, "skipped_old": 0, "duplicates": 0, "complete": False})
+    report.update({"pages": 0, "skipped_old": 0, "duplicates": 0, "trashed": 0, "complete": False})
     for page in range(1, MAX_PAGES + 1):
         for attempt in range(MAX_429_RETRIES + 1):
             limiter.wait()
@@ -154,6 +154,9 @@ def fetch_orders(
                 report["duplicates"] += 1
                 continue
             seen.add(key)
+            if is_trashed(order):
+                report["trashed"] = report.get("trashed", 0) + 1
+                continue
             orders.append(order)
         report["pages"] = page
         old_pages = 0 if page_has_recent else old_pages + 1
@@ -165,6 +168,28 @@ def fetch_orders(
             return orders
         params = {"per_page": PER_PAGE, "sort_direction": "desc", "cursor": next_cursor}
     return orders
+
+
+TRASH_FLAGS = ("deleted_at", "trashed_at", "is_deleted", "is_trashed", "in_trash", "trashed", "deleted", "is_archived", "archived_at")
+TRASH_WORDS = ("corbeille", "supprim", "trash", "delete", "archiv")
+
+
+def is_trashed(order: dict) -> bool:
+    """Order moved to the EcoManager trash ("En corbeille").
+
+    A trashed order keeps its last state id (often 1, "En confirmation"), so without this
+    check it would show as an order still waiting for confirmation."""
+    for flag in TRASH_FLAGS:
+        value = order.get(flag)
+        if value not in (None, False, 0, "0", "", "false", "False"):
+            return True
+    for key in ("order_state_name", "status", "state"):
+        value = order.get(key)
+        if isinstance(value, dict):
+            value = value.get("name")
+        if isinstance(value, str) and any(word in value.lower() for word in TRASH_WORDS):
+            return True
+    return False
 
 
 def order_state(order: dict) -> str | None:
@@ -189,6 +214,8 @@ def orders_to_rows(orders: Iterable[dict], shop: str | None = None, prefix_refer
     orders with the same reference in two shops are never merged."""
     rows = []
     for order in orders:
+        if is_trashed(order):
+            continue
         reference = order.get("reference")
         if prefix_reference and shop and reference:
             reference = f"{shop} \u00b7 {reference}"
