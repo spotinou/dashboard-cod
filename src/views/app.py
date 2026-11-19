@@ -19,7 +19,8 @@ def compute_dashboard_data(df: pd.DataFrame, thresholds: dict[str, float]) -> di
     """Every table and indicator the tabs display, computed once for the filtered orders."""
     volume_product = int(thresholds["volume_product"])
     volume_sent = int(thresholds["volume_sent"])
-    volume_confirmatrice = volume_sent
+    volume_confirmatrice = int(thresholds.get("volume_confirmatrice", volume_sent))
+    volume_livreur = int(thresholds.get("volume_livreur", volume_sent))
     global_metrics = compute_global_metrics(df)
     validation_checks = compute_validation_checks(df, global_metrics)
     confirmation = compute_confirmation_metrics(df)
@@ -65,12 +66,12 @@ def compute_dashboard_data(df: pd.DataFrame, thresholds: dict[str, float]) -> di
     livreur_preparation = preparation_metrics_by_dimension(df, "Livreur", "livreur")
     livreurs = livreurs.merge(livreur_preparation, on="livreur", how="left")
     livreurs[["en_preparation", "taux_preparation"]] = livreurs[["en_preparation", "taux_preparation"]].fillna({"en_preparation": 0})
-    livreurs_ui = add_volume_reading(livreurs, "commandes_envoyees", volume_sent, "livreur", thresholds)
+    livreurs_ui = add_volume_reading(livreurs, "commandes_envoyees", volume_livreur, "livreur", thresholds)
     products_ui = add_volume_reading(products, "commandes_recues", volume_product, "produit", thresholds)
     product_wilaya_detail = add_volume_reading(product_wilaya_performance(df), "commandes_envoyees", volume_sent, "product_wilaya", thresholds)
     wilaya_livreur_detail = add_volume_reading(livreur_wilaya_performance(df), "commandes_envoyees", volume_sent, "wilaya_livreur", thresholds)
     wilayas_ui = add_volume_reading(wilayas, "commandes_envoyees", volume_sent, "wilaya", thresholds)
-    reliable_livreurs = reliable_rows(livreurs_ui, "livreur", "commandes_envoyees", volume_sent)
+    reliable_livreurs = reliable_rows(livreurs_ui, "livreur", "commandes_envoyees", volume_livreur)
     reliable_products = reliable_rows(products_ui, "produit", "commandes_recues", volume_product)
     reliable_wilayas = reliable_rows(wilayas_ui, "wilaya", "commandes_envoyees", volume_sent)
     product_livreur_detail = product_livreur_performance(df, volume_sent, thresholds)
@@ -110,6 +111,7 @@ def compute_dashboard_data(df: pd.DataFrame, thresholds: dict[str, float]) -> di
         "volume_confirmatrice": volume_confirmatrice,
         "volume_product": volume_product,
         "volume_sent": volume_sent,
+        "volume_livreur": volume_livreur,
         "wilaya_livreur_compare": wilaya_livreur_compare,
         "wilaya_livreur_detail": wilaya_livreur_detail,
         "wilayas": wilayas,

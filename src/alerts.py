@@ -22,6 +22,8 @@ DEFAULT_THRESHOLDS = {
     "preparation_red": 0.15,
     "volume_product": 10,
     "volume_sent": 5,
+    "volume_confirmatrice": 30,  # below this, a confirmatrice is left out of comparisons
+    "volume_livreur": 20,  # below this (shipped parcels), a livreur is left out of comparisons
 }
 
 

@@ -422,12 +422,16 @@ def filter_dataframe(df: pd.DataFrame, file_signature=None) -> tuple[pd.DataFram
 
     st.sidebar.header("Seuils")
     volume_product = st.sidebar.number_input("Volume min produit", 1, 1000, int(DEFAULT_THRESHOLDS["volume_product"]))
-    volume_sent = st.sidebar.number_input("Volume min wilaya/livreur", 1, 1000, int(DEFAULT_THRESHOLDS["volume_sent"]))
+    volume_sent = st.sidebar.number_input("Volume min wilaya", 1, 1000, int(DEFAULT_THRESHOLDS["volume_sent"]))
+    volume_confirmatrice = st.sidebar.number_input("Volume min confirmatrice (reçues)", 1, 1000, int(DEFAULT_THRESHOLDS["volume_confirmatrice"]), help="En dessous, la confirmatrice est retirée des classements et tableaux : trop peu de commandes pour la juger.")
+    volume_livreur = st.sidebar.number_input("Volume min livreur (expédiées)", 1, 1000, int(DEFAULT_THRESHOLDS["volume_livreur"]), help="En dessous, le livreur est retiré des classements et tableaux : trop peu de colis pour le juger.")
     ad_cost = st.sidebar.number_input("Co\u00fbt par achat Meta Ads (\u20ac)", 0.0, 1000.0, 0.0, 0.1, help="Facultatif : pour afficher ton vrai co\u00fbt d'acquisition client.")
     thresholds = {
         **DEFAULT_THRESHOLDS,
         "volume_product": volume_product,
         "volume_sent": volume_sent,
+        "volume_confirmatrice": volume_confirmatrice,
+        "volume_livreur": volume_livreur,
         "confirmation_green": st.sidebar.slider("Confirmation vert >= ", 0.0, 1.0, DEFAULT_THRESHOLDS["confirmation_green"], 0.01),
         "confirmation_orange": st.sidebar.slider("Confirmation orange >= ", 0.0, 1.0, DEFAULT_THRESHOLDS["confirmation_orange"], 0.01),
         "cancellation_orange": st.sidebar.slider("Annulation orange > ", 0.0, 1.0, DEFAULT_THRESHOLDS["cancellation_orange"], 0.01),

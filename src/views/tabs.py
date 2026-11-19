@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from .formatting import SENSITIVE_COLUMNS, TREND_ACCENT, adaptive_height, is_known_value, money, pct, prepare_dataframe_for_display, safe_ratio, sort_for_display, tone_class, top_label, weighted_rate
+from .formatting import reliable_rows, SENSITIVE_COLUMNS, TREND_ACCENT, adaptive_height, is_known_value, money, pct, prepare_dataframe_for_display, safe_ratio, sort_for_display, tone_class, top_label, weighted_rate
 from .components import render_priority_focus, cockpit_heading, decision_summary, render_data_table, render_quality_badge, render_section_kpis, render_selectable_data_table, selected_index, show_drilldown, tab_header
 from .filters import render_active_filters_banner, render_date_context
 from .analysis import build_export, confirmation_summary, delivery_summary, product_summary, validation_summary, validation_value, wilaya_summary
@@ -94,7 +94,7 @@ def render_confirmation_tab(ctx: dict) -> None:
     with st.expander("📋 Voir le détail par confirmatrice (tableau)", expanded=False):
         st.caption("Clique sur une ligne pour afficher les commandes concernees.")
         confirmation_cols = ["confirmatrice", "fiabilite_volume", "commandes_recues", "commandes_annulees", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "retours", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
-        event, confirmation_view = render_selectable_data_table(confirmation_display, confirmation_cols, "confirmation_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_recues")
+        event, confirmation_view = render_selectable_data_table(reliable_rows(confirmation_display, "confirmatrice", "commandes_recues", volume_confirmatrice), confirmation_cols, "confirmation_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_recues")
         idx = selected_index(event)
         if idx is not None and idx < len(confirmation_view):
             row = confirmation_view.iloc[idx]
@@ -102,7 +102,7 @@ def render_confirmation_tab(ctx: dict) -> None:
 
     with st.expander("Analyse Confirmatrice x Produit", expanded=False):
         cp_cols = ["confirmatrice", "produit", "fiabilite_volume", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_retours", "lecture_rapide"]
-        render_data_table(confirmatrice_product_detail, cp_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["confirmatrice", "commandes_recues"])
+        render_data_table(confirmatrice_product_detail[confirmatrice_product_detail["confirmatrice"].isin(reliable_rows(confirmation_display, "confirmatrice", "commandes_recues", volume_confirmatrice)["confirmatrice"])] if not confirmatrice_product_detail.empty else confirmatrice_product_detail, cp_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["confirmatrice", "commandes_recues"])
 
     with st.expander("Voir detail complet confirmation", expanded=False):
         render_data_table(confirmation_display, list(confirmation_display.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_recues")
@@ -115,6 +115,7 @@ def render_delivery_tab(ctx: dict) -> None:
     livreurs_ui = ctx["livreurs_ui"]
     thresholds = ctx["thresholds"]
     volume_sent = ctx["volume_sent"]
+    volume_livreur = ctx.get("volume_livreur", volume_sent)
     wilaya_livreur_compare = ctx["wilaya_livreur_compare"]
     wilaya_livreur_detail = ctx["wilaya_livreur_detail"]
     tab_header("Livraison & livreurs", "Performance apres expedition, retours et CA bloque chez les livreurs.")
@@ -134,20 +135,20 @@ def render_delivery_tab(ctx: dict) -> None:
     with col1:
         render_rate_ranking(
             livreurs_ui, "livreur", "taux_livraison_total", "livrees", "commandes_envoyees",
-            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_sent, "Taux livr\u00e9 (sur exp\u00e9di\u00e9es)", "", True, "rank_livreur_livre",
+            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_livreur, "Taux livr\u00e9 (sur exp\u00e9di\u00e9es)", "", True, "rank_livreur_livre",
         )
     with col2:
         # Delivered / (delivered + returned): parcels still on the road are left out.
         livreurs_finished = livreurs_ui.assign(colis_termines=livreurs_ui["livrees"] + livreurs_ui["retours"])
         render_rate_ranking(
             livreurs_finished, "livreur", "taux_livraison_finalisees", "livrees", "colis_termines",
-            "colis_termines", "colis termin\u00e9s", volume_sent, "Taux livr\u00e9 (sur colis termin\u00e9s)", "", True, "rank_livreur_livre_termines",
+            "colis_termines", "colis termin\u00e9s", volume_livreur, "Taux livr\u00e9 (sur colis termin\u00e9s)", "", True, "rank_livreur_livre_termines",
         )
 
     with st.expander("📋 Voir le détail par livreur (tableau)", expanded=False):
         st.caption("Livraison, retours et CA par livreur.")
         livreur_cols = ["livreur", "fiabilite_volume", "en_preparation", "taux_preparation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_bloque_livraison", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre"]
-        event, livreurs_view = render_selectable_data_table(livreurs_ui, livreur_cols, "livreur_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
+        event, livreurs_view = render_selectable_data_table(reliable_rows(livreurs_ui, "livreur", "commandes_envoyees", volume_livreur), livreur_cols, "livreur_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
         idx = selected_index(event)
         if idx is not None and idx < len(livreurs_view):
             row = livreurs_view.iloc[idx]
@@ -164,7 +165,7 @@ def render_delivery_tab(ctx: dict) -> None:
 
     with st.expander("Voir detail complet livreurs", expanded=False):
         render_data_table(livreurs_ui, list(livreurs_ui.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="commandes_envoyees")
-    decision_summary("Résumé décisionnel", delivery_summary(livreurs_ui, volume_sent))
+    decision_summary("Résumé décisionnel", delivery_summary(livreurs_ui, volume_livreur))
 
 
 def render_products_tab(ctx: dict) -> None:
