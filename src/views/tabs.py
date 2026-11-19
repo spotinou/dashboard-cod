@@ -25,23 +25,24 @@ def render_global_tab(ctx: dict) -> None:
     priority_actions = ctx["priority_actions"]
     thresholds = ctx["thresholds"]
     validation_checks = ctx["validation_checks"]
-    tab_header("Vue globale", "Les chiffres essentiels pour piloter rapidement votre activite COD.")
-    render_quality_badge(validation_checks)
-    render_date_context(date_context)
-    render_active_filters_banner(date_context)
     if thresholds.get("mobile_view"):
         render_mobile_summary(df, loaded_df, global_metrics, thresholds)
         if not st.checkbox("Afficher tout le d\u00e9tail", value=False, key="mobile_show_all"):
             return
-    # Morning / evening check: each rate once, then where orders are, what is stuck, the trend; money last.
+    # Morning / evening check: the rates, their evolution, where orders are, what is stuck.
+    # Money and technical details (period, filters, data quality) come last, folded.
     render_cockpit(df, loaded_df, date_context, global_metrics, thresholds)
+    render_trend_section(df, loaded_df, date_context, global_metrics, thresholds, show_comparison=False)
     render_order_status_section(global_metrics)
     render_stuck_orders_section(df, loaded_df)
-    render_trend_section(df, loaded_df, date_context, global_metrics, thresholds, show_comparison=False)
     if priority_actions is not None:
         render_priority_focus(priority_actions)
     with st.expander("\U0001f4b0 Argent / Chiffre d'affaires", expanded=False):
         render_owner_money(df, global_metrics)
+    with st.expander("\u2139\ufe0f D\u00e9tails : p\u00e9riode, filtres et qualit\u00e9 des donn\u00e9es", expanded=False):
+        render_quality_badge(validation_checks)
+        render_date_context(date_context)
+        render_active_filters_banner(date_context)
 
 
 def render_confirmation_tab(ctx: dict) -> None:

@@ -453,3 +453,29 @@ def test_post_shipping_status_without_shipping_date_is_sent_not_preparation(stat
     assert bool(row["is_preparation"]) is False
     assert metrics["orders_sent"] == 1
     assert metrics["orders_preparation"] == 0
+
+
+def test_multi_product_orders_count_for_each_product_and_split_revenue():
+    from src.metrics import compute_product_metrics
+
+    base = {"Crée le": "2026-01-01", "Wilaya": "Alger", "Livreur": "HHD", "Affectée à": "Sara",
+            "Statut commande": "Livrée", "Expédiée le": "2026-01-02", "Livrée le": "2026-01-04"}
+    rows = [
+        # order A: 2 products, total 4000 = 3000 (P1) + 1000 (P2)
+        {**base, "Référence commande": "A", "Nom produit": "P1", "Prix de vente": "1500", "Quantité": "2", "Total commande": "4000"},
+        {**base, "Référence commande": "A", "Nom produit": "P2", "Prix de vente": "1000", "Quantité": "1", "Total commande": "4000"},
+        # order B: P2 only, returned
+        {**base, "Référence commande": "B", "Nom produit": "P2", "Prix de vente": "1000", "Quantité": "1", "Total commande": "1000",
+         "Statut commande": "Retournée", "Livrée le": None, "Retournée le": "2026-01-06"},
+    ]
+    df = prepare_dataframe(pd.DataFrame(rows))
+    products = compute_product_metrics(df).set_index("produit")
+    assert products.loc["P1", "commandes_recues"] == 1 and products.loc["P1", "livrees"] == 1
+    assert products.loc["P2", "commandes_recues"] == 2  # A and B: P2 is no longer forgotten in A
+    assert products.loc["P2", "livrees"] == 1 and products.loc["P2", "retours"] == 1
+    # revenue split by price x quantity: the sum still equals the global delivered revenue
+    assert products.loc["P1", "ca_livre"] == pytest.approx(3000)
+    assert products.loc["P2", "ca_livre"] == pytest.approx(1000)
+    assert products["ca_livre"].sum() == pytest.approx(compute_global_metrics(df)["ca_delivered"])
+    # global figures are unchanged: 2 orders
+    assert compute_global_metrics(df)["orders_received"] == 2

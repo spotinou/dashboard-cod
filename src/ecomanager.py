@@ -25,6 +25,14 @@ from .data_loader import prepare_dataframe
 ORDERS_PATH = "/api/shop/v2/orders"
 PER_PAGE = 100
 MAX_PAGES = 400  # safety net: 40 000 orders
+OLD_PAGES_BEFORE_STOP = 2  # consecutive pages made only of orders older than the history start
+
+# Order states documented by EcoManager (GET /order-states). The id never changes while the
+# name follows the account language (French, Arabic, English), so the id wins.
+ORDER_STATE_NAMES = {
+    1: "En confirmation", 2: "En préparation", 3: "En dispatch", 4: "En livraison", 5: "Livrée",
+    6: "En retour", 7: "Encaissée", 8: "Retournée", 9: "Annulée",
+}
 MAX_PER_MINUTE = 45  # stay under the 50 / minute quota
 MIN_INTERVAL_SECONDS = 0.25  # stay under the 5 / second quota
 MAX_429_RETRIES = 3
@@ -86,8 +94,12 @@ def fetch_orders(
     limiter: RateLimiter | None = None,
     sleep: Callable[[float], None] = time.sleep,
     progress: Callable[[int, int], None] | None = None,
+    report: dict | None = None,
 ) -> list[dict]:
-    """All orders created on or after `since` (newest first)."""
+    """All orders created on or after `since` (newest first).
+
+    `report`, when given, is filled with pages read, old orders skipped, duplicates
+    removed and whether the reading reached its natural end (`complete`)."""
     if not token:
         raise EcoManagerError("Aucune clé API EcoManager configurée (Secrets Streamlit).")
     session = session or requests.Session()
@@ -96,6 +108,10 @@ def fetch_orders(
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json", "Content-Type": "application/json"}
     params: dict = {"per_page": PER_PAGE, "sort_direction": "desc"}
     orders: list[dict] = []
+    seen: set = set()
+    old_pages = 0
+    report = report if report is not None else {}
+    report.update({"pages": 0, "skipped_old": 0, "duplicates": 0, "complete": False})
     for page in range(1, MAX_PAGES + 1):
         for attempt in range(MAX_429_RETRIES + 1):
             limiter.wait()
@@ -114,22 +130,50 @@ def fetch_orders(
             raise EcoManagerError("EcoManager est en maintenance (503). Réessaie plus tard.")
         if response.status_code != 200:
             raise EcoManagerError(f"Erreur de l'API EcoManager ({response.status_code}).")
-        payload = response.json()
-        batch = payload.get("data") or []
-        reached_older = False
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise EcoManagerError("Réponse illisible de l'API EcoManager (pas du JSON).") from exc
+        batch = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(batch, list):
+            raise EcoManagerError("Réponse inattendue de l'API EcoManager (pas de liste de commandes).")
+        # Pages are ordered by id, not by creation date: an old order (exchange, restored or
+        # imported order...) can appear among recent ones. A single old order must never stop
+        # the reading; we stop only after OLD_PAGES_BEFORE_STOP pages made only of old orders.
+        page_has_recent = False
         for order in batch:
+            if not isinstance(order, dict):
+                continue
             created = _parse_dt(order.get("created_at"))
             if created is not None and created < since:
-                reached_older = True
+                report["skipped_old"] += 1
                 continue
+            page_has_recent = True
+            key = order.get("id", order.get("reference"))
+            if key in seen:
+                report["duplicates"] += 1
+                continue
+            seen.add(key)
             orders.append(order)
+        report["pages"] = page
+        old_pages = 0 if page_has_recent else old_pages + 1
         if progress:
             progress(page, len(orders))
         next_cursor = (payload.get("meta") or {}).get("next_cursor")
-        if reached_older or not batch or not next_cursor:
+        if not batch or not next_cursor or old_pages >= OLD_PAGES_BEFORE_STOP:
+            report["complete"] = True
             return orders
         params = {"per_page": PER_PAGE, "sort_direction": "desc", "cursor": next_cursor}
     return orders
+
+
+def order_state(order: dict) -> str | None:
+    """French state name from the documented state id, else the name sent by the API."""
+    try:
+        state_id = int(order.get("order_state_id"))
+    except (TypeError, ValueError):
+        state_id = None
+    return ORDER_STATE_NAMES.get(state_id) or order.get("order_state_name")
 
 
 def _name(value) -> str | None:
@@ -154,7 +198,7 @@ def orders_to_rows(orders: Iterable[dict], shop: str | None = None, prefix_refer
             "Tracking": order.get("tracking"),
             "N°commande": f"{shop}-{order.get('id')}" if prefix_reference and shop else order.get("id"),
             "Méthode de livraison": "Stop desk" if order.get("is_stopdesk") in (True, 1, "1") else "Domicile",
-            "Statut commande": order.get("order_state_name"),
+            "Statut commande": order_state(order),
             "Client": order.get("full_name"),
             "Email": order.get("email"),
             "Téléphone": order.get("telephone"),

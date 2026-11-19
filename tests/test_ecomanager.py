@@ -5,7 +5,9 @@ import pytest
 import requests
 
 from src.data_loader import prepare_dataframe
-from src.ecomanager import EcoManagerError, RateLimiter, fetch_orders, orders_to_dataframe, orders_to_rows
+from src.ecomanager import ORDER_STATE_NAMES, EcoManagerError, RateLimiter, fetch_orders, orders_to_dataframe, orders_to_rows
+
+STATE_IDS = {name: state_id for state_id, name in ORDER_STATE_NAMES.items()}
 from src.metrics import compute_global_metrics, compute_livreur_metrics
 
 
@@ -13,7 +15,7 @@ def doc_order(order_id, state, created, **extra):
     """An order shaped like the 'Retrieve a single order' example of the EcoManager documentation."""
     order = {
         "id": order_id, "reference": f"DEM{order_id}", "tracking": None, "is_stopdesk": 0,
-        "order_state_id": 1, "order_state_name": state, "confirmation_state_name": None,
+        "order_state_id": STATE_IDS.get(state), "order_state_name": state, "confirmation_state_name": None,
         "full_name": "Client", "email": None, "telephone": "0666666666", "telephone_2": None,
         "wilaya": "Alger", "commune": "Draria", "address": "Appartement 4", "note": None, "api_source": None,
         "items": [{"sku": "ABD1234", "title": "iPhone 13 Pro", "title_fr": "iPhone 13 Pro", "option_name": "Noir", "selling_price": "1500", "quantity": 1}],
@@ -61,7 +63,7 @@ def test_fetch_reads_pages_newest_first_and_stops_at_start_date():
     ])
     orders = fetch_orders("https://shop.ecomanager.dz/", "TOKEN", datetime(2026, 10, 15), session=session, limiter=NoWait())
     assert [o["id"] for o in orders] == [3, 2, 1]
-    assert len(session.calls) == 2
+    assert len(session.calls) == 3  # the 3rd page (only old orders, no next page) ends the reading
     first = session.calls[0]
     assert first["url"] == "https://shop.ecomanager.dz/api/shop/v2/orders"
     assert first["headers"]["Authorization"] == "Bearer TOKEN"
@@ -194,3 +196,53 @@ def test_secrets_formats(monkeypatch):
     assert ds.api_shops() == [{"name": None, "base_url": ds.DEFAULT_BASE_URL, "token": "X"}]
     monkeypatch.setattr(ds.st, "secrets", {})
     assert ds.api_shops() == []
+
+
+def test_one_old_order_among_recent_ones_does_not_stop_the_reading():
+    """Real case: pages are ordered by id; an exchange / restored order with an old creation date
+    sits among recent orders. Reading used to stop there and lose every order after it."""
+    report = {}
+    session = FakeSession([
+        page([doc_order(10, "Livrée", "2026-11-15 10:00:00"), doc_order(9, "Livrée", "2025-01-01 10:00:00"),
+              doc_order(8, "Annulée", "2026-11-10 10:00:00")], "c2"),
+        page([doc_order(7, "Livrée", "2026-10-20 10:00:00"), doc_order(6, "Livrée", "2026-09-30 10:00:00")], "c3"),
+        page([doc_order(5, "Livrée", "2026-09-01 10:00:00")], "c4"),   # 1st page with only old orders
+        page([doc_order(4, "Livrée", "2026-08-01 10:00:00")], "c5"),   # 2nd -> stop
+        page([doc_order(3, "Livrée", "2026-11-01 10:00:00")]),         # never requested
+    ])
+    orders = fetch_orders("https://x", "T", datetime(2026, 10, 1), session=session, limiter=NoWait(), report=report)
+    assert [o["id"] for o in orders] == [10, 8, 7]
+    assert len(session.calls) == 4
+    assert report == {"pages": 4, "skipped_old": 4, "duplicates": 0, "complete": True}
+
+
+def test_duplicate_orders_across_pages_are_counted_once():
+    report = {}
+    session = FakeSession([
+        page([doc_order(3, "Livrée", "2026-11-15 10:00:00"), doc_order(2, "Livrée", "2026-11-14 10:00:00")], "c2"),
+        page([doc_order(2, "Livrée", "2026-11-14 10:00:00"), doc_order(1, "Livrée", "2026-11-13 10:00:00")]),
+    ])
+    orders = fetch_orders("https://x", "T", datetime(2026, 10, 1), session=session, limiter=NoWait(), report=report)
+    assert [o["id"] for o in orders] == [3, 2, 1] and report["duplicates"] == 1
+
+
+def test_state_id_wins_over_translated_name():
+    arabic = doc_order(1, "Livrée", "2026-11-01 10:00:00", order_state_name="تم التسليم",
+                       shipped_at="2026-11-02 10:00:00", delivered_at="2026-11-04 10:00:00")
+    assert orders_to_rows([arabic])[0]["Statut commande"] == "Livrée"
+    m = compute_global_metrics(orders_to_dataframe([arabic]))
+    assert m["orders_delivered"] == 1 and m["orders_unclassified"] == 0
+    unknown_id = doc_order(2, "Livrée", "2026-11-01 10:00:00", order_state_id=None)
+    assert orders_to_rows([unknown_id])[0]["Statut commande"] == "Livrée"  # falls back to the name
+
+
+def test_unexpected_payloads_are_clear_errors():
+    with pytest.raises(EcoManagerError, match="inattendue"):
+        fetch_orders("https://x", "T", datetime(2026, 1, 1), session=FakeSession([FakeResponse(200, {"message": "oops"})]), limiter=NoWait())
+
+    class NotJson(FakeResponse):
+        def json(self):
+            raise ValueError("no json")
+
+    with pytest.raises(EcoManagerError, match="illisible"):
+        fetch_orders("https://x", "T", datetime(2026, 1, 1), session=FakeSession([NotJson(200)]), limiter=NoWait())

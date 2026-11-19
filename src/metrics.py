@@ -122,8 +122,33 @@ GROUP_METRIC_COLUMNS = [
 ]
 
 
-def _group_metrics(df: pd.DataFrame, group_col: str, sent_only: bool = False) -> pd.DataFrame:
-    o = _orders(df)
+CA_COLUMNS = ["ca_total", "ca_delivered", "ca_in_confirmation", "ca_dispatch", "ca_in_delivery", "ca_preparation", "ca_returned_failed"]
+
+
+def _product_orders(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per (order, product): an order with 2 products counts for both products.
+
+    Order statuses are the order's. Amounts are the order's, split between its products
+    in proportion to price x quantity (equal split when prices are missing), so the sum
+    over products still equals the order total."""
+    o = _orders(df).drop(columns=["Nom produit"])
+    lines = df.copy()
+    price = pd.to_numeric(lines.get("Prix de vente"), errors="coerce").fillna(0) if "Prix de vente" in lines else 0
+    qty = pd.to_numeric(lines.get("Quantité"), errors="coerce").fillna(1) if "Quantité" in lines else 1
+    lines["_line_value"] = (price * qty).clip(lower=0) if not isinstance(price, int) else 0.0
+    per_product = lines.groupby(["order_id", "Nom produit"], dropna=False)["_line_value"].sum().reset_index()
+    order_value = per_product.groupby("order_id", dropna=False)["_line_value"].transform("sum")
+    n_products = per_product.groupby("order_id", dropna=False)["_line_value"].transform("size")
+    per_product["_share"] = (per_product["_line_value"] / order_value).where(order_value > 0, 1.0 / n_products)
+    out = per_product.merge(o, on="order_id", how="left")
+    for col in CA_COLUMNS:
+        if col in out.columns:
+            out[col] = out[col] * out["_share"]
+    return out.drop(columns=["_line_value", "_share"])
+
+
+def _group_metrics(df: pd.DataFrame, group_col: str, sent_only: bool = False, orders: pd.DataFrame | None = None) -> pd.DataFrame:
+    o = _orders(df) if orders is None else orders
     if sent_only:
         o = o[o["is_sent"]]
     rows = []
@@ -314,7 +339,7 @@ def _decision(row: pd.Series, volume_col: str, volume_min: int) -> str:
 
 
 def compute_product_metrics(df: pd.DataFrame, volume_min: int = 10) -> pd.DataFrame:
-    out = _group_metrics(df, "Nom produit").rename(columns={"Nom produit": "produit"})
+    out = _group_metrics(df, "Nom produit", orders=_product_orders(df)).rename(columns={"Nom produit": "produit"})
     decisions = out.apply(lambda r: _product_problem(r, volume_min), axis=1)
     out["decision_auto"] = decisions.apply(lambda x: x[0])
     out["probleme_probable"] = decisions.apply(lambda x: x[1])
