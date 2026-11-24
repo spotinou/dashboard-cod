@@ -48,57 +48,39 @@ def comparison_rows(loaded_df: pd.DataFrame, date_context: dict, metrics: dict) 
     return {row["key"]: row for row in rows}, note, previous
 
 
-def before_html(text: str, row: dict | None, arrow: bool = True) -> str:
-    """'avant : …', green when better, red when worse. No 'points' jargon."""
-    if not text:
-        return ""
-    tone = (row or {}).get("tone", "neutral")
-    arrow = {"up": "▲ ", "down": "▼ "}.get((row or {}).get("direction"), "") if arrow else ""
-    provisional = " (provisoire, colis encore en route)" if (row or {}).get("provisional") else ""
-    return f'<div style="font-size:12px;font-weight:700;color:{DELTA_COLORS.get(tone, DELTA_COLORS["neutral"])};margin-top:6px">{arrow}avant : {html_text(text)}{provisional}</div>'
-
-
-def delta_html(row: dict | None) -> str:
-    """Previous value of a comparison row, as 'avant : …'."""
-    if not row or row.get("delta") is None:
-        return ""
-    return before_html(format_metric_value(row["previous"], row["kind"]), row)
-
-
-def gauge_html(sign: dict) -> str:
-    """Thin bar of the rate with a black tick at the objective."""
-    value = sign["value"]
-    width = 0.0 if value is None or pd.isna(value) else max(min(float(value), 1.0), 0.0) * 100
-    objective = sign["objective"] * 100
-    fill = {GOOD: "#16a34a", WARN: "#f59e0b", BAD: "#dc2626"}.get(sign["verdict"], "#94a3b8")
-    symbol = "≥" if sign["higher_is_better"] else "≤"
+def gauge_html(sign: dict | None, value=None) -> str:
+    """Progress bar with the rate written inside; colour = verdict, black tick = objective."""
+    if sign is not None and value is None:
+        value = sign["value"]
+    ok = value is not None and not pd.isna(value)
+    width = max(min(float(value), 1.0), 0.0) * 100 if ok else 0.0
+    fill = {GOOD: "#16a34a", WARN: "#f59e0b", BAD: "#dc2626"}.get((sign or {}).get("verdict"), "#64748b")
+    tick = ""
+    if sign is not None:
+        tick = f'<div style="position:absolute;left:{sign["objective"] * 100:.1f}%;top:-3px;width:2px;height:28px;background:#0f172a"></div>'
+    label = html_text(pct(value)) if ok else "–"
     return (
-        '<div style="position:relative;height:8px;background:#eef2f7;border-radius:4px;margin:10px 0 3px">'
-        f'<div style="width:{width:.1f}%;height:8px;background:{fill};border-radius:4px"></div>'
-        f'<div style="position:absolute;left:{objective:.1f}%;top:-4px;width:2px;height:16px;background:#0f172a"></div></div>'
-        f'<div style="font-size:11px;color:#475569">objectif {symbol} {html_text(pct(sign["objective"]))}</div>'
+        '<div style="position:relative;height:22px;background:#eef2f7;border-radius:999px;margin:10px 0 2px">'
+        f'<div style="width:{width:.1f}%;min-width:44px;height:22px;background:{fill};border-radius:999px;'
+        f'display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800">{label}</div>{tick}</div>'
     )
 
 
 def flow_card_html(title: str, big: str, detail: str = "", sign: dict | None = None, extra: str = "",
-                   before: str = "", accent: str | None = None, background: str | None = None) -> str:
-    badge = ""
-    if sign is not None and sign.get("verdict") in VERDICT_BADGE:
-        label, bg, fg = VERDICT_BADGE[sign["verdict"]]
-        badge = f'<span style="background:{bg};color:{fg};border-radius:999px;padding:2px 8px;font-size:11px;font-weight:800;white-space:nowrap">{label}</span>'
+                   accent: str | None = None, background: str | None = None, rate=None) -> str:
     style = CARD_STYLE + (f";border-left:5px solid {accent}" if accent else "") + (f";background:{background}" if background else "")
+    bar = gauge_html(sign, rate) if sign is not None or rate is not None else ""
     return (
         f'<div style="{style}">'
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
-        f'<span style="font-size:14px;font-weight:800;color:#0f172a">{html_text(title)}{help_icon(title)}</span>{badge}</div>'
+        f'<div style="font-size:14px;font-weight:800;color:#0f172a">{html_text(title)}{help_icon(title)}</div>'
         f'<div style="font-size:30px;font-weight:850;color:#0f172a;line-height:1.1;margin-top:4px">{html_text(big)}</div>'
         f'<div style="font-size:12.5px;color:#334155;margin-top:2px">{detail}</div>'
-        f"{gauge_html(sign) if sign is not None else ''}{extra}{before}</div>"
+        f"{bar}{extra}</div>"
     )
 
 
-def received_card_html(metrics: dict, row: dict | None) -> str:
-    return flow_card_html("Commandes reçues", format_count(metrics.get("orders_received", 0)), "Base de la période", before=delta_html(row))
+def received_card_html(metrics: dict, row: dict | None = None) -> str:
+    return flow_card_html("Commandes reçues", format_count(metrics.get("orders_received", 0)), "Base de la période")
 
 
 def multiplier_card_html(mult: dict, ad_cost: float = 0.0) -> str:
@@ -114,19 +96,7 @@ def multiplier_card_html(mult: dict, ad_cost: float = 0.0) -> str:
     return flow_card_html("Multiplicateur CAC", format_factor(real), detail, extra=extra, accent="#7c3aed", background="#faf5ff")
 
 
-def _count_before(previous: dict | None, count, row: dict | None) -> str:
-    """Previous count and, when a rate row is given, previous rate; coloured by the rate
-    (the judged figure). No arrow: the count and the rate can move in opposite directions."""
-    if not previous:
-        return ""
-    value = count(previous) if callable(count) else previous.get(count, 0)
-    text = format_count(value)
-    if row and row.get("previous") is not None:
-        text += f" · {pct(row['previous'])}"
-    return before_html(text, row, arrow=False)
-
-
-def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float], rows: dict, previous: dict | None) -> list[str]:
+def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float], rows: dict | None = None, previous: dict | None = None) -> list[str]:
     """The 8 cards, in the order of the order journey."""
     signs = {s["key"]: s for s in vital_signs(metrics, thresholds)}
     received = int(metrics.get("orders_received", 0) or 0)
@@ -153,36 +123,23 @@ def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float],
         f"Nette (hors annulées) : <b>{html_text(pct(net))}</b> ({format_count(delivered)} sur {format_count(confirmed_net)})</div>"
     )
     return [
-        received_card_html(metrics, rows.get("orders_received")),
+        received_card_html(metrics),
         flow_card_html(
             "Confirmées", format_count(confirmed),
-            f"<b>{html_text(pct(confirmed / received if received else None))}</b> des {format_count(received)} reçues · {format_count(in_confirmation)} encore en confirmation",
-            signs["confirmation"], before=_count_before(previous, exclusive_confirmed, rows.get("confirmation_display_rate")),
+            f"sur {format_count(received)} reçues · {format_count(in_confirmation)} encore en confirmation", signs["confirmation"],
+            rate=confirmed / received if received else None,
         ),
-        flow_card_html(
-            "Annulées", format_count(cancelled),
-            f"<b>{html_text(pct(metrics.get('cancellation_rate')))}</b> des {format_count(received)} reçues",
-            signs["cancellation"], before=_count_before(previous, "orders_cancelled", rows.get("cancellation_rate")),
-        ),
+        flow_card_html("Annulées", format_count(cancelled), f"sur {format_count(received)} reçues", signs["cancellation"]),
         flow_card_html(
             "Expédiées", format_count(sent),
             f"sur {format_count(confirmed)} confirmées · {format_count(preparation)} encore en préparation",
-            before=_count_before(previous, "orders_sent", None),
+            rate=sent / confirmed if confirmed else None,
         ),
+        flow_card_html("Livrées", format_count(delivered), f"sur {format_count(sent)} expédiées", signs["delivery"], extra=delivered_extra),
+        flow_card_html("Retours", format_count(returned), f"sur {format_count(sent)} expédiées", signs["return"]),
         flow_card_html(
-            "Livrées", format_count(delivered),
-            f"<b>{html_text(pct(metrics.get('delivery_total_rate_on_sent')))}</b> des {format_count(sent)} expédiées",
-            signs["delivery"], extra=delivered_extra, before=_count_before(previous, "orders_delivered", rows.get("delivery_total_rate_on_sent")),
-        ),
-        flow_card_html(
-            "Retours", format_count(returned),
-            f"<b>{html_text(pct(metrics.get('return_rate_on_sent')))}</b> des {format_count(sent)} expédiées",
-            signs["return"], before=_count_before(previous, "orders_returned_failed", rows.get("return_rate_on_sent")),
-        ),
-        flow_card_html(
-            "Transformation brute", pct(metrics.get("transformation_real_rate")),
-            f"{format_count(delivered)} livrées sur {format_count(received)} reçues",
-            signs["transformation"], extra=brute_extra, before=delta_html(rows.get("transformation_real_rate")), accent="#16a34a",
+            "Transformation brute", format_count(delivered), f"livrées sur {format_count(received)} reçues",
+            signs["transformation"], extra=brute_extra, accent="#16a34a",
         ),
         multiplier_card_html(cac_multiplier(metrics), thresholds.get("ad_cost_per_purchase", 0.0)),
     ]
@@ -201,12 +158,10 @@ def summary_text(metrics: dict, thresholds: dict[str, float]) -> str:
 
 def render_cockpit(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context: dict, metrics: dict, thresholds: dict[str, float]) -> None:
     try:
-        rows, note, previous = comparison_rows(loaded_df, date_context, metrics)
-        cards = journey_cards(df, metrics, thresholds, rows, previous)
+        cards = journey_cards(df, metrics, thresholds)
         st.markdown(
             '<div class="section-tight">Parcours COD</div>'
-            f'<div class="section-subtitle">De la réception à la livraison. Trait noir = ton objectif (réglable dans la barre latérale). {html_text(note)}</div>'
-            f'<div style="font-size:14px;font-weight:800;color:#0f172a;margin:2px 0 8px">{html_text(summary_text(metrics, thresholds))}</div>'
+            f'<div class="section-subtitle">De la réception à la livraison. Trait noir = ton objectif (réglable dans la barre latérale). Couleur : vert = objectif atteint, orange = proche, rouge = sous l’objectif.</div>'
             f'<div style="display:flex;gap:12px;flex-wrap:wrap">{"".join(cards)}</div>',
             unsafe_allow_html=True,
         )

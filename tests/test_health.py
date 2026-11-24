@@ -202,21 +202,20 @@ def test_cockpit_shows_the_order_journey_in_numbers(monkeypatch):
         assert page.count(title) == 1, title
     # big numbers are order counts, with their base
     assert f">{metrics['orders_received']}<" in page
-    assert f"des {metrics['orders_received']} reçues" in page
-    assert f"des {metrics['orders_sent']} expédiées" in page
+    assert f"sur {metrics['orders_received']} reçues" in page
+    assert f"sur {metrics['orders_sent']} expédiées" in page
+    assert "avant :" not in page and "Proche de l'objectif" not in page
     assert "Sur colis terminés" in page and "Nette (hors annulées)" in page
     # no jargon and no unexplained coloured dots
     for banned in ["pts", "🟢", "🟠", "🔴", "⚪"]:
         assert banned not in page, banned
 
 
-def test_previous_count_and_rate_are_shown_without_misleading_arrow():
-    from src.views.cockpit import _count_before
+def test_cards_have_no_previous_period_and_show_rate_in_bar():
+    from src.views.cockpit import gauge_html
 
-    row = {"previous": 0.195, "tone": "good", "direction": "down", "delta": -0.01}
-    html = _count_before({"orders_cancelled": 180}, "orders_cancelled", row)
-    assert "avant : 180 · 19.5 %" in html and "▼" not in html and "#166534" in html
-    assert _count_before(None, "orders_cancelled", row) == ""
+    html = gauge_html({"value": 0.603, "objective": 0.7, "verdict": "warn", "higher_is_better": True})
+    assert "60.3 %" in html and "avant" not in html
 
 
 def test_multiplier_card_with_ad_cost():
@@ -237,4 +236,4 @@ def test_confirmed_card_rate_is_exactly_count_over_received(monkeypatch):
                "delivery_finalized_rate": 413 / 638, "return_rate_on_sent": 225 / 723, "transformation_real_rate": 413 / 970}
     cards = cockpit.journey_cards(build_df().iloc[0:0], metrics, {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0}, {}, None)
     confirmed = cards[1]
-    assert ">726<" in confirmed and "74.8 %</b> des 970 reçues" in confirmed
+    assert ">726<" in confirmed and "74.8 %" in confirmed and "sur 970 reçues" in confirmed
