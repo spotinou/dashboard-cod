@@ -7,7 +7,7 @@ import streamlit as st
 
 from ..metrics import compute_global_metrics
 from ..trends import TREND_CHARTS, auto_granularity, compute_period_comparison, compute_trend, previous_period, provisional_mask, trend_reading
-from .formatting import DASH, TREND_ACCENT, TREND_ACCENT_LIGHT, TREND_AVERAGE_COLOR, TREND_GRID_COLOR, TREND_TONE_COLORS, format_date, help_icon, html_text, money, pct
+from .formatting import DASH, TREND_ACCENT, TREND_ACCENT_LIGHT, TREND_AVERAGE_COLOR, TREND_GRID_COLOR, TREND_TONE_COLORS, format_date, format_period_range, help_icon, html_text, money, pct
 from .components import cockpit_heading, render_section_kpis
 from .filters import DATE_TYPE_OPTIONS, apply_date_filter, apply_filter_values, date_series, detect_date_columns, get_date_column
 
@@ -227,10 +227,11 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
     try:
         prev_df, window = previous_period_frame(loaded_df, date_context) if show_comparison else (None, None)
         if show_comparison:
-            window_text = f" ({format_date(window[0])} → {format_date(window[1])})" if window else ""
+            current_text = format_period_range(date_context.get("start_date"), date_context.get("end_date"))
+            window_text = f" : {format_period_range(window[0], window[1])}" if window else ""
             cockpit_heading(
                 "Comparaison avec la période précédente",
-                f"M\u00eame dur\u00e9e juste avant{window_text}. Vert = mieux qu'avant, rouge = moins bien.",
+                f"Période analysée : {current_text}. Comparée \u00e0 la m\u00eame dur\u00e9e juste avant{window_text}. Vert = mieux qu'avant, rouge = moins bien.",
             )
             if window is None:
                 st.caption("Comparaison indisponible : aucune période d'analyse définie.")
@@ -251,7 +252,7 @@ def render_trend_section(df: pd.DataFrame, loaded_df: pd.DataFrame, date_context
         unit = {"Jour": "jour", "Semaine": "semaine", "Mois": "mois"}[granularity]
         cockpit_heading(
             "\u00c9volution de mes taux",
-            f"Un point par {unit}. Ligne verte = ton objectif, ligne grise = ta moyenne. En clair = {unit} pas encore termin\u00e9 ou colis encore en route.",
+            f"Un point par {unit}, sur la période {format_period_range(date_context.get('start_date'), date_context.get('end_date'))}. Ligne verte = ton objectif, ligne grise = ta moyenne de cette période. En clair = {unit} pas encore termin\u00e9 ou colis encore en route.",
         )
         trend = compute_trend(df, date_context.get("date_column"), granularity, date_context.get("start_date"), date_context.get("end_date"))
         if len(trend) < 2:

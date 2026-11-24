@@ -357,6 +357,19 @@ def format_date(value) -> str:
     return pd.Timestamp(value).strftime("%Y/%m/%d")
 
 
+def period_days(start, end) -> int | None:
+    if start is None or end is None or pd.isna(start) or pd.isna(end):
+        return None
+    return (pd.Timestamp(end) - pd.Timestamp(start)).days + 1
+
+
+def format_period_range(start, end) -> str:
+    """'2026/10/25 → 2026/11/23 (30 jours)'."""
+    days = period_days(start, end)
+    suffix = f" ({days} jour{'s' if days > 1 else ''})" if days else ""
+    return f"{format_date(start)} → {format_date(end)}{suffix}"
+
+
 def top_known(df: pd.DataFrame, label_col: str, sort_col: str, limit: int = 5) -> pd.DataFrame:
     if df.empty or label_col not in df.columns or sort_col not in df.columns:
         return df.iloc[0:0].copy()

@@ -238,3 +238,31 @@ def test_confirmed_card_rate_is_exactly_count_over_received(monkeypatch):
     cards = cockpit.journey_cards(build_df().iloc[0:0], metrics, {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0}, {}, None)
     confirmed = cards[1]
     assert ">726<" in confirmed and "74.8 %</b> des 970 reçues" in confirmed
+
+
+def test_pending_cards_show_orders_in_confirmation_and_in_delivery():
+    import src.views.cockpit as cockpit
+
+    metrics = {"orders_received": 970, "orders_in_confirmation": 41, "orders_cancelled": 203, "orders_confirmed_net": 767,
+               "orders_unclassified": 0, "orders_sent": 723, "orders_delivered": 413, "orders_returned_failed": 225,
+               "orders_preparation": 3, "orders_dispatch": 60, "orders_in_delivery": 25, "orders_logistics": 85,
+               "ca_in_confirmation": 410000.0, "ca_logistics": 850000.0, "cancellation_rate": 203 / 970,
+               "delivery_total_rate_on_sent": 413 / 723, "delivery_finalized_rate": 413 / 638,
+               "return_rate_on_sent": 225 / 723, "transformation_real_rate": 413 / 970}
+    previous = {"orders_in_confirmation": 30, "orders_logistics": 70}
+    cards = cockpit.journey_cards(build_df().iloc[0:0], metrics, {**DEFAULT_THRESHOLDS, "ad_cost_per_purchase": 0.0}, {}, previous)
+    confirmation = next(c for c in cards if "En cours de confirmation" in c)
+    delivery = next(c for c in cards if "En cours de livraison" in c)
+    assert ">41<" in confirmation and "avant : 30" in confirmation
+    assert ">85<" in delivery and "avant : 70" in delivery and "60 dispatchées, 25 chez le livreur" in delivery
+
+
+def test_comparison_note_names_both_periods():
+    import datetime as dt
+    import src.views.cockpit as cockpit
+
+    note = cockpit.comparison_note(
+        {"start_date": dt.date(2026, 10, 25), "end_date": dt.date(2026, 11, 23)},
+        (dt.date(2026, 9, 25), dt.date(2026, 10, 24)),
+    )
+    assert "2026/10/25 → 2026/11/23 (30 jours)" in note and "2026/09/25 → 2026/10/24 (30 jours)" in note

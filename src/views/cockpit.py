@@ -12,7 +12,7 @@ from ..health import BAD, GOOD, WARN, average_delivery_days, health_summary, vit
 from ..metrics import compute_global_metrics
 from ..trends import cac_multiplier, compute_period_comparison, exclusive_confirmed, net_transformation_rate
 from .evolution import format_metric_value, previous_period_frame
-from .formatting import format_count, format_date, help_icon, html_text, pct
+from .formatting import format_count, format_date, format_period_range, help_icon, html_text, money, pct
 from .health_view import CARD_STYLE
 from .overview import format_factor
 
@@ -44,8 +44,15 @@ def comparison_rows(loaded_df: pd.DataFrame, date_context: dict, metrics: dict) 
         return {}, "Pas de comparaison : la période précédente n'est pas (entièrement) dans les données.", None
     previous = compute_global_metrics(prev_df)
     rows = compute_period_comparison(metrics, previous)
-    note = f"« Avant » = même durée juste avant ({format_date(window[0])} → {format_date(window[1])})."
+    note = comparison_note(date_context, window)
     return {row["key"]: row for row in rows}, note, previous
+
+
+def comparison_note(date_context: dict, window: tuple) -> str:
+    """Says exactly which dates are analysed and which dates « avant » refers to."""
+    current = format_period_range(date_context.get("start_date"), date_context.get("end_date"))
+    previous = format_period_range(window[0], window[1])
+    return f"Période analysée : {current}. « Avant » = même durée juste avant : {previous}."
 
 
 def before_html(text: str, row: dict | None, arrow: bool = True) -> str:
@@ -126,8 +133,14 @@ def _count_before(previous: dict | None, count, row: dict | None) -> str:
     return before_html(text, row, arrow=False)
 
 
+def pending_card_html(title: str, count: int, detail: str, ca: float, before: str, accent: str, background: str) -> str:
+    """Orders waiting in a step (not a rate: no objective, no verdict)."""
+    extra = f'<div style="font-size:12px;color:#475569;margin-top:6px">CA en attente : <b>{html_text(money(ca))}</b></div>'
+    return flow_card_html(title, format_count(count), detail, extra=extra, before=before, accent=accent, background=background)
+
+
 def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float], rows: dict, previous: dict | None) -> list[str]:
-    """The 8 cards, in the order of the order journey."""
+    """The 10 cards, in the order of the order journey."""
     signs = {s["key"]: s for s in vital_signs(metrics, thresholds)}
     received = int(metrics.get("orders_received", 0) or 0)
     confirmed = exclusive_confirmed(metrics)
@@ -138,6 +151,9 @@ def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float],
     in_confirmation = int(metrics.get("orders_in_confirmation", 0) or 0)
     preparation = int(metrics.get("orders_preparation", 0) or 0)
     confirmed_net = int(metrics.get("orders_confirmed_net", 0) or 0)
+    dispatch = int(metrics.get("orders_dispatch", 0) or 0)
+    in_delivery = int(metrics.get("orders_in_delivery", 0) or 0)
+    logistics = int(metrics.get("orders_logistics", dispatch + in_delivery) or 0)
     finished = delivered + returned
     delay = average_delivery_days(df)
 
@@ -183,6 +199,18 @@ def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float],
             "Transformation brute", pct(metrics.get("transformation_real_rate")),
             f"{format_count(delivered)} livrées sur {format_count(received)} reçues",
             signs["transformation"], extra=brute_extra, before=delta_html(rows.get("transformation_real_rate")), accent="#16a34a",
+        ),
+        pending_card_html(
+            "En cours de confirmation", in_confirmation,
+            f"<b>{html_text(pct(in_confirmation / received if received else None))}</b> des {format_count(received)} reçues · pas encore confirmées ni annulées",
+            float(metrics.get("ca_in_confirmation", 0) or 0),
+            _count_before(previous, "orders_in_confirmation", None), "#f59e0b", "#fffbeb",
+        ),
+        pending_card_html(
+            "En cours de livraison", logistics,
+            f"<b>{html_text(pct(logistics / sent if sent else None))}</b> des {format_count(sent)} expédiées · {format_count(dispatch)} dispatchées, {format_count(in_delivery)} chez le livreur",
+            float(metrics.get("ca_logistics", 0) or 0),
+            _count_before(previous, "orders_logistics", None), "#0ea5e9", "#f0f9ff",
         ),
         multiplier_card_html(cac_multiplier(metrics), thresholds.get("ad_cost_per_purchase", 0.0)),
     ]
