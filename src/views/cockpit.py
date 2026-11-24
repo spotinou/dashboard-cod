@@ -141,7 +141,7 @@ def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float],
         flow_card_html("Livrées", format_count(delivered), f"sur {format_count(sent)} expédiées", signs["delivery"], extra=delivered_extra),
         flow_card_html("Retours", format_count(returned), f"sur {format_count(sent)} expédiées", signs["return"]),
         flow_card_html(
-            "Transformation brute", format_count(delivered), f"livrées sur {format_count(received)} reçues",
+            "Transformation brute", pct(metrics.get("transformation_real_rate")), f"{format_count(delivered)} livrées sur {format_count(received)} reçues",
             signs["transformation"], extra=brute_extra, accent="#16a34a",
         ),
         multiplier_card_html(cac_multiplier(metrics), thresholds.get("ad_cost_per_purchase", 0.0)),
