@@ -32,7 +32,7 @@ def render_global_tab(ctx: dict) -> None:
     # Morning / evening check: the rates, their evolution, where orders are, what is stuck.
     # Money and technical details (period, filters, data quality) come last, folded.
     render_cockpit(df, loaded_df, date_context, global_metrics, thresholds)
-    render_trend_section(df, loaded_df, date_context, global_metrics, thresholds, show_comparison=False)
+    render_trend_section(df, loaded_df, date_context, global_metrics, thresholds, show_comparison=True)
     render_order_status_section(global_metrics)
     render_stuck_orders_section(df, loaded_df)
     if priority_actions is not None:
