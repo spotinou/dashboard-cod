@@ -8,7 +8,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ..health import BAD, GOOD, WARN, average_delivery_days, health_summary, vital_signs
+from ..health import BAD, GOOD, WARN, health_summary, vital_signs
 from ..metrics import compute_global_metrics
 from ..trends import cac_multiplier, compute_period_comparison, exclusive_confirmed, net_transformation_rate
 from .evolution import format_metric_value, previous_period_frame
@@ -109,13 +109,16 @@ def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float],
     preparation = int(metrics.get("orders_preparation", 0) or 0)
     confirmed_net = int(metrics.get("orders_confirmed_net", 0) or 0)
     finished = delivered + returned
-    delay = average_delivery_days(df)
+    in_delivery = int(metrics.get("orders_in_delivery", 0) or 0)
+
+    def pending_pill(count: int, label: str, bg: str, fg: str) -> str:
+        return (f'<div style="margin-top:8px"><span style="background:{bg};color:{fg};border-radius:999px;padding:3px 10px;'
+                f'font-size:12.5px;font-weight:800">{format_count(count)} {label}</span></div>')
 
     delivered_extra = (
-        f'<div style="font-size:12px;color:#334155;margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:5px;line-height:1.5">'
-        f"Sur colis terminés : <b>{html_text(pct(metrics.get('delivery_finalized_rate')))}</b> ({format_count(delivered)} sur {format_count(finished)} livrés ou revenus)"
-        + (f"<br>Délai moyen de livraison : <b>{delay['days']:.1f} jours</b>".replace(".", ",") if delay.get("days") is not None else "")
-        + "</div>"
+        f'<div style="font-size:12px;color:#334155;margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:5px">'
+        f"Sur colis terminés : <b>{html_text(pct(metrics.get('delivery_finalized_rate')))}</b></div>"
+        + pending_pill(in_delivery, "en cours de livraison", "#ede9fe", "#5b21b6")
     )
     net = net_transformation_rate(metrics)
     brute_extra = (
@@ -132,8 +135,8 @@ def journey_cards(df: pd.DataFrame, metrics: dict, thresholds: dict[str, float],
         flow_card_html("Annulées", format_count(cancelled), f"sur {format_count(received)} reçues", signs["cancellation"]),
         flow_card_html(
             "Expédiées", format_count(sent),
-            f"sur {format_count(confirmed)} confirmées · {format_count(preparation)} encore en préparation",
-            rate=sent / confirmed if confirmed else None,
+            f"sur {format_count(confirmed)} confirmées",
+            rate=sent / confirmed if confirmed else None, extra=pending_pill(preparation, "en cours de préparation", "#e0f2fe", "#075985"),
         ),
         flow_card_html("Livrées", format_count(delivered), f"sur {format_count(sent)} expédiées", signs["delivery"], extra=delivered_extra),
         flow_card_html("Retours", format_count(returned), f"sur {format_count(sent)} expédiées", signs["return"]),
