@@ -1,4 +1,4 @@
-# Dashboard opérationnel COD
+# Data Luxelle
 
 Application Streamlit locale pour analyser un export Excel CRM/ERP de commandes COD.
 

@@ -118,9 +118,9 @@ def compute_dashboard_data(df: pd.DataFrame, thresholds: dict[str, float]) -> di
 
 
 def run_app() -> None:
-    st.set_page_config(page_title="Dashboard COD", layout="wide")
+    st.set_page_config(page_title="Data Luxelle", layout="wide")
     st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
-    st.title("Dashboard opérationnel COD")
+    st.title("Data Luxelle")
     loaded = load_orders()
     if loaded is None:
         return

@@ -1,0 +1,42 @@
+# Garde l'app Streamlit éveillée : Streamlit Community Cloud endort une app
+# après ~12 h sans visite. Ce job la visite toutes les 6 h (et clique sur
+# « Yes, get this app back up! » si elle dort déjà).
+# Réglage : Settings > Secrets and variables > Actions > Variables
+#           créer STREAMLIT_APP_URL = https://ton-app.streamlit.app
+name: keep-awake
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Visiter l'app et la réveiller si besoin
+        env:
+          APP_URL: ${{ vars.STREAMLIT_APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then echo "Variable STREAMLIT_APP_URL manquante"; exit 1; fi
+          npm install --no-save playwright@1.49.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > wake.js <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.goto(process.env.APP_URL, { waitUntil: 'domcontentloaded' });
+            const btn = page.getByRole('button', { name: /get this app back up/i });
+            if (await btn.count().catch(() => 0) || await btn.isVisible({ timeout: 15000 }).catch(() => false)) {
+              console.log('App endormie : clic sur le bouton de réveil');
+              await btn.click();
+            } else {
+              console.log('App déjà éveillée');
+            }
+            await page.waitForTimeout(45000); // laisse l'app démarrer / garde la connexion ouverte
+            await browser.close();
+          })();
+          JS
+          node wake.js
