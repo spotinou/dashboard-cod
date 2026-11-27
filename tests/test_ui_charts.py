@@ -1,3 +1,4 @@
+from src.views.formatting import DISPLAY_COLUMNS
 import pandas as pd
 import src.ui as ui
 
@@ -116,10 +117,10 @@ def test_styled_metric_table_uses_display_values_not_raw_ratios():
     }
     styled = style_metric_table(df, thresholds)
     rendered = styled.data
-    assert rendered["taux_livraison_finalisees"].iloc[0] == "72.3 %"
-    assert rendered["taux_livraison_total"].iloc[0] == "65.9 %"
-    assert rendered["taux_retour"].iloc[0] == "25.2 %"
-    assert rendered["ca_livre"].iloc[0] == "739 500 DA"
+    assert rendered[DISPLAY_COLUMNS["taux_livraison_finalisees"]].iloc[0] == "72.3 %"
+    assert rendered[DISPLAY_COLUMNS["taux_livraison_total"]].iloc[0] == "65.9 %"
+    assert rendered[DISPLAY_COLUMNS["taux_retour"]].iloc[0] == "25.2 %"
+    assert rendered[DISPLAY_COLUMNS["ca_livre"]].iloc[0] == "739 500 DA"
     assert df["taux_livraison_total"].iloc[0] == 0.659016
 
 
@@ -420,10 +421,10 @@ def test_render_data_table_with_duplicate_requested_columns_does_not_crash(monke
 
     assert result == "rendered"
     rendered = captured["data"]
-    assert rendered.columns.tolist().count("taux_en_cours_logistique") == 1
-    assert rendered["taux_en_cours_logistique"].iloc[0] == "10.0 %"
-    assert rendered["taux_livraison_total"].iloc[0] == "72.0 %"
-    assert rendered["ca_livre"].iloc[0] == "10 000 DA"
+    assert rendered.columns.tolist().count(DISPLAY_COLUMNS["taux_en_cours_logistique"]) == 1
+    assert rendered[DISPLAY_COLUMNS["taux_en_cours_logistique"]].iloc[0] == "10.0 %"
+    assert rendered[DISPLAY_COLUMNS["taux_livraison_total"]].iloc[0] == "72.0 %"
+    assert rendered[DISPLAY_COLUMNS["ca_livre"]].iloc[0] == "10 000 DA"
 
 
 def test_top_wilayas_display_path_does_not_create_duplicate_columns(monkeypatch):
@@ -461,8 +462,8 @@ def test_top_wilayas_display_path_does_not_create_duplicate_columns(monkeypatch)
 
     assert result == "rendered"
     rendered = captured["data"]
-    assert rendered.columns.tolist().count("taux_en_cours_logistique") == 1
-    assert rendered["taux_en_cours_logistique"].iloc[0] == "20.0 %"
+    assert rendered.columns.tolist().count(DISPLAY_COLUMNS["taux_en_cours_logistique"]) == 1
+    assert rendered[DISPLAY_COLUMNS["taux_en_cours_logistique"]].iloc[0] == "20.0 %"
 
 
 def test_analysis_period_selector_initializes_active_value_and_form_draft_for_first_file():

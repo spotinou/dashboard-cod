@@ -346,8 +346,12 @@ def compute_product_metrics(df: pd.DataFrame, volume_min: int = 10) -> pd.DataFr
     cols = [
         "produit",
         "commandes_recues",
+        "commandes_annulees",
         "commandes_confirmees_nettes",
+        "en_confirmation",
+        "commandes_non_classees",
         "taux_confirmation",
+        "taux_annulation",
         "commandes_envoyees",
         "livrees",
         "en_dispatch",

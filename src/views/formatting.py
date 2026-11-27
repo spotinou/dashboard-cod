@@ -12,6 +12,8 @@ SENSITIVE_COLUMNS = {"Client", "Email", "Téléphone", "Téléphone 2", "Adresse
 DISPLAY_COLUMNS = {
     "confirmatrice": "Confirmatrice",
     "livreur": "Livreur",
+    "fiabilite_volume": "Fiabilité volume",
+    "lecture_rapide": "Lecture rapide",
     "produit": "Produit",
     "wilaya": "Wilaya",
     "commandes_recues": "Commandes reçues",
@@ -328,15 +330,26 @@ def style_metric_table(df: pd.DataFrame, thresholds: dict[str, float]):
             return "color: #dc2626; font-weight: 700"
         return metric_color(value, col, thresholds)
 
+    # st.dataframe shows the DataFrame's own column names (it ignores Styler.relabel_index),
+    # so the readable labels are set on the data itself; duplicates get a numbered suffix.
+    labels: list[str] = []
+    for col in style_cols:
+        label = DISPLAY_COLUMNS.get(col, col)
+        while label in labels:
+            label = f"{label} ({col})"
+        labels.append(label)
+    label_to_col = dict(zip(labels, style_cols))
+    display.columns = labels
+
     def style_column(series: pd.Series) -> list[str]:
-        col = series.name
+        col = label_to_col.get(series.name, series.name)
         return [style_cell(raw.at[idx, col], col) if col in raw.columns and idx in raw.index else "" for idx in series.index]
 
     styled = display.style.apply(style_column, axis=0)
-    numeric_cols = [col for col in style_cols if col not in {"confirmatrice", "livreur", "produit", "wilaya", "decision_auto", "produit_dominant", "livreur_dominant", "controle", "attendu", "statut", "probleme_probable", "cause_probable", "action_recommandee"}]
-    styled = styled.set_properties(subset=numeric_cols, **{"text-align": "right"})
-    styled = styled.set_properties(subset=[col for col in style_cols if col not in numeric_cols], **{"text-align": "left"})
-    return styled.relabel_index([DISPLAY_COLUMNS.get(col, col) for col in style_cols], axis=1)
+    text_cols = {"confirmatrice", "livreur", "produit", "wilaya", "decision_auto", "produit_dominant", "livreur_dominant", "controle", "attendu", "statut", "probleme_probable", "cause_probable", "action_recommandee"}
+    numeric_labels = [label for label, col in label_to_col.items() if col not in text_cols]
+    styled = styled.set_properties(subset=numeric_labels, **{"text-align": "right"})
+    return styled.set_properties(subset=[label for label in labels if label not in numeric_labels], **{"text-align": "left"})
 
 
 def is_known_value(value) -> bool:

@@ -3,18 +3,19 @@ from __future__ import annotations
 
 import streamlit as st
 
-from .formatting import SENSITIVE_COLUMNS, TREND_ACCENT, adaptive_height, is_known_value, money, pct, prepare_dataframe_for_display, safe_ratio, sort_for_display, tone_class, top_label, weighted_rate
+from .formatting import SENSITIVE_COLUMNS, adaptive_height, is_known_value, pct, prepare_dataframe_for_display, safe_ratio, sort_for_display, tone_class, top_label
 from .components import render_priority_focus, cockpit_heading, decision_summary, render_data_table, render_quality_badge, render_section_kpis, render_selectable_data_table, selected_index, show_drilldown, tab_header
 from .filters import render_active_filters_banner, render_date_context
-from .analysis import build_export, confirmation_summary, delivery_summary, product_summary, validation_summary, validation_value, wilaya_summary
+from .analysis import build_export, confirmation_summary, delivery_summary, validation_summary, validation_value, wilaya_summary
 from ..rankings import group_card_rates
 from .overview import confirmation_funnel_counts, displayed_reception_rates, render_owner_money
 from .mobile_view import render_mobile_summary
 from .cockpit import render_cockpit
 from .health_view import render_stuck_orders_section
 from .evolution import render_trend_section
-from .ranking_charts import render_amount_ranking, render_rate_ranking
+from .ranking_charts import render_rate_ranking
 from .flow_charts import render_order_status_section
+from .products_view import render_products_tab_v2
 
 
 def render_global_tab(ctx: dict) -> None:
@@ -168,72 +169,7 @@ def render_delivery_tab(ctx: dict) -> None:
 
 
 def render_products_tab(ctx: dict) -> None:
-    df = ctx["df"]
-    product_livreur_detail = ctx["product_livreur_detail"]
-    product_wilaya_detail = ctx["product_wilaya_detail"]
-    products = ctx["products"]
-    products_advice = ctx["products_advice"]
-    products_ui = ctx["products_ui"]
-    sku_performance = ctx["sku_performance"]
-    sku_product_detail = ctx["sku_product_detail"]
-    source_performance = ctx["source_performance"]
-    source_product_detail = ctx["source_product_detail"]
-    thresholds = ctx["thresholds"]
-    volume_product = ctx["volume_product"]
-    tab_header("Produits", "Produits qui encaissent, produits qui perdent et segments a surveiller.")
-    product_count = int(products_ui["produit"].apply(is_known_value).sum()) if not products_ui.empty and "produit" in products_ui.columns else 0
-    main_product = top_label(products_ui, "produit", "ca_livre", "commandes_recues", volume_product)
-    render_section_kpis([
-        ("Nombre de produits", product_count, "produits exploitables", "neutral"),
-        ("Produit principal", main_product, "meilleur CA livre", "info"),
-        ("CA livre total", money(products["ca_livre"].sum() if "ca_livre" in products.columns else 0), f"{int(products['livrees'].sum()) if 'livrees' in products.columns else 0} livrees", "good"),
-        ("En cours logistique", int(products["en_cours_logistique"].sum()) if "en_cours_logistique" in products.columns else 0, f"{pct(weighted_rate(products, 'en_cours_logistique', 'commandes_envoyees'))} des expediees", "warn"),
-        ("Perte CA retours", money(products["ca_retours"].sum() if "ca_retours" in products.columns else 0), f"{int(products['retours'].sum()) if 'retours' in products.columns else 0} retours", "loss"),
-    ])
-
-    with st.expander("📋 Voir le détail par produit (tableau)", expanded=False):
-        st.caption("Produit par produit, avec CA livre et pertes retours.")
-        product_cols = ["produit", "fiabilite_volume", "decision_auto", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_livraison_total", "retours", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "ca_bloque_livraison", "panier_moyen_livre"]
-        event, products_view = render_selectable_data_table(products_ui, product_cols, "product_table", thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="ca_livre")
-        idx = selected_index(event)
-        if idx is not None and idx < len(products_view):
-            row = products_view.iloc[idx]
-            show_drilldown(df, "produit", "Nom produit", row["produit"], "Retours / echecs", "produit")
-
-    with st.expander("📋 Voir le détail produit × wilaya (tableau)", expanded=False):
-        st.caption("Segments prioritaires par zone.")
-        product_wilaya_cols = ["produit", "wilaya", "fiabilite_volume", "commandes_recues", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_transformation_reel", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "livreur_dominant", "lecture_rapide"]
-        render_data_table(product_wilaya_detail, product_wilaya_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["ca_livre", "ca_retours"])
-
-    with st.expander("Produit x Livreur", expanded=False):
-        product_livreur_cols = ["produit", "livreur", "fiabilite_volume", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "retours", "taux_livraison_total", "taux_en_cours_logistique", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "panier_moyen_livre", "lecture_rapide"]
-        render_data_table(product_livreur_detail, product_livreur_cols, thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by=["ca_retours", "commandes_envoyees"])
-
-    with st.expander("Source x Produit", expanded=False):
-        source_product_cols = ["source", "produit", "fiabilite_volume", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "lecture_rapide"]
-        render_data_table(source_product_detail, source_product_cols, thresholds, "Aucune donnee Source exploitable.", sort_by=["commandes_recues", "ca_retours"])
-
-    with st.expander("SKU x Produit", expanded=False):
-        sku_product_cols = ["sku_produit", "produit", "fiabilite_volume", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours", "lecture_rapide"]
-        render_data_table(sku_product_detail, sku_product_cols, thresholds, "Aucune donnee SKU exploitable.", sort_by="ca_livre")
-
-    with st.expander("Voir performances Source et SKU agregees", expanded=False):
-        source_cols = ["source", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
-        render_data_table(source_performance, source_cols, thresholds, "Aucune donnee Source exploitable.", sort_by="ca_livre")
-        sku_cols = ["sku_produit", "produit_associe", "commandes_recues", "commandes_confirmees_nettes", "taux_confirmation", "commandes_envoyees", "livrees", "en_dispatch", "en_livraison", "en_cours_logistique", "taux_en_cours_logistique", "taux_transformation_reel", "taux_retour", "ca_livre", "ca_dispatch", "ca_en_cours_logistique", "ca_retours"]
-        render_data_table(sku_performance, sku_cols, thresholds, "Aucune donnee SKU exploitable.", sort_by="ca_livre")
-
-    col1, col2 = st.columns(2, gap="large")
-    with col1:
-        render_rate_ranking(
-            products_ui, "produit", "taux_retour", "retours", "commandes_envoyees",
-            "commandes_envoyees", "exp\u00e9di\u00e9es", volume_product, "Taux retour par produit", "", False, "rank_produit_retour",
-        )
-    with col2:
-        render_amount_ranking(products_ui, "produit", "ca_livre", "CA livr\u00e9 par produit", "", TREND_ACCENT, "amount_produit_livre")
-    with st.expander("Voir detail complet produits", expanded=False):
-        render_data_table(products_advice, list(products_advice.columns), thresholds, "Aucune donnee disponible avec les filtres actuels.", sort_by="ca_livre")
-    decision_summary("Résumé décisionnel", product_summary(products_ui, volume_product))
+    render_products_tab_v2(ctx)
 
 
 def render_wilayas_tab(ctx: dict) -> None:
