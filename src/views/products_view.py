@@ -197,14 +197,21 @@ def render_product_kpis(metrics: dict, thresholds: dict) -> None:
     real = metrics.get("transformation_real_rate")
     logistics = int(metrics.get("orders_logistics", 0) or 0)
 
-    def per_100(value) -> str:
-        return "—" if value is None else str(round(value * 100))
+    def count(key: str) -> int:
+        return int(metrics.get(key, 0) or 0)
+
+    received, sent, delivered, cancelled = count("orders_received"), count("orders_sent"), count("orders_delivered"), count("orders_cancelled")
+    # Same count as the "Taux confirmé" rate: received minus cancelled minus still in confirmation.
+    confirmed = max(received - count("orders_in_confirmation") - cancelled, 0)
+
+    def value(number: int, rate) -> str:
+        return f"{format_count(number)} · {pct(rate)}"
 
     render_section_kpis([
-        ("Taux confirmé", pct(confirmation), f"Sur 100 reçues, {per_100(confirmation)} confirmées", tone_class(confirmation, "confirmation", thresholds)),
-        ("Taux annulé", pct(cancellation), f"{format_count(metrics.get('orders_cancelled', 0) or 0)} commandes annulées", tone_class(cancellation, "cancellation", thresholds)),
-        ("Livraison (sur expédiées)", pct(delivery), f"Sur 100 colis expédiés, {per_100(delivery)} livrés", tone_class(delivery, "delivery", thresholds)),
-        ("Taux réel (sur reçues)", pct(real), f"Sur 100 reçues, {per_100(real)} livrées", tone_class(real, "transformation", thresholds)),
+        ("Taux confirmé", value(confirmed, confirmation), f"confirmées sur {format_count(received)} reçues", tone_class(confirmation, "confirmation", thresholds)),
+        ("Taux annulé", value(cancelled, cancellation), f"annulées sur {format_count(received)} reçues", tone_class(cancellation, "cancellation", thresholds)),
+        ("Livraison (sur expédiées)", value(delivered, delivery), f"livrés sur {format_count(sent)} colis expédiés", tone_class(delivery, "delivery", thresholds)),
+        ("Taux réel (sur reçues)", value(delivered, real), f"livrées sur {format_count(received)} reçues", tone_class(real, "transformation", thresholds)),
         ("Colis en route", format_count(logistics), f"{money(metrics.get('ca_logistics', 0))} en attente", "info"),
     ])
 
